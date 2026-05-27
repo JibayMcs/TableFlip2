@@ -64,7 +64,10 @@ final readonly class ConnectionConfig
                 'database' => $database,
                 'username' => $this->username,
                 'password' => $this->password,
-                'charset' => $this->charset,
+                // Postgres only knows 'utf8' (and a few exotic encodings). The
+                // mysql-style 'utf8mb4' default would crash libpq with
+                // "invalid value for parameter \"client_encoding\"".
+                'charset' => $this->resolveCharset('utf8'),
                 'prefix' => '',
                 'schema' => $this->options['schema'] ?? 'public',
                 'sslmode' => $this->ssl ? ($this->sslOptions['mode'] ?? 'require') : 'prefer',
@@ -76,7 +79,7 @@ final readonly class ConnectionConfig
                 'database' => $database,
                 'username' => $this->username,
                 'password' => $this->password,
-                'charset' => 'utf8',
+                'charset' => $this->resolveCharset('utf8'),
                 'prefix' => '',
                 'encrypt' => $this->ssl ? 'yes' : ($this->options['encrypt'] ?? 'no'),
                 'trust_server_certificate' => $this->options['trust_server_certificate'] ?? false,
@@ -110,6 +113,17 @@ final readonly class ConnectionConfig
      * keeps the PDO connection valid while still letting `listDatabases()`
      * enumerate everything the user can see.
      */
+    /**
+     * Use the user-provided charset when they overrode the default, otherwise
+     * fall back to a driver-appropriate one. Keeps utf8mb4 for MySQL/MariaDB
+     * (where it's the sane default) while stopping the same value from being
+     * pushed into engines that don't accept it.
+     */
+    private function resolveCharset(string $driverDefault): string
+    {
+        return $this->charset === 'utf8mb4' ? $driverDefault : $this->charset;
+    }
+
     private function resolveDatabase(): string
     {
         if ($this->database !== '') {

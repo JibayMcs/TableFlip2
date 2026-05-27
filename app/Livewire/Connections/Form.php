@@ -59,7 +59,7 @@ class Form extends Component
 
     public bool $passwordTouched = false;
 
-    public function mount(?int $connection = null): void
+    public function mount(?DatabaseConnection $connection = null): void
     {
         $factory = app(DatabaseDriverFactory::class);
         $policy = AllowedConnectionPolicy::fromConfig();
@@ -82,19 +82,21 @@ class Form extends Component
             $this->database = $policy->allowedDatabases[0];
         }
 
-        if ($connection !== null) {
-            $model = DatabaseConnection::findOrFail($connection);
-            Gate::authorize('update', $model);
+        // Route-model binding gives us an empty model instance on the /new
+        // route (no {connection} placeholder) — exists() distinguishes that
+        // from an actual hydrated record.
+        if ($connection !== null && $connection->exists) {
+            Gate::authorize('update', $connection);
 
-            $this->connection = $model;
-            $this->name = $model->name;
-            $this->driver = $model->driver;
-            $this->host = (string) ($model->host ?? '');
-            $this->port = $model->port;
-            $this->database = (string) ($model->database ?? '');
-            $this->username = (string) ($model->username ?? '');
-            $this->ssl = $model->ssl;
-            $this->color = $model->color;
+            $this->connection = $connection;
+            $this->name = $connection->name;
+            $this->driver = $connection->driver;
+            $this->host = (string) ($connection->host ?? '');
+            $this->port = $connection->port;
+            $this->database = (string) ($connection->database ?? '');
+            $this->username = (string) ($connection->username ?? '');
+            $this->ssl = $connection->ssl;
+            $this->color = $connection->color;
             // password is intentionally NOT preloaded — empty means "keep existing"
         }
 
