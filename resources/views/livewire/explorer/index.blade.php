@@ -1,19 +1,53 @@
 <div class="h-full flex">
     {{-- Sidebar tree (independent scroll, flush left) --}}
     <aside class="w-72 shrink-0 border-r border-zinc-200 bg-white overflow-y-auto">
-        <div x-data="{ q: '' }" @keydown.escape="q = ''">
+        <div x-data="{
+                q: '',
+                ql() { return this.q.toLowerCase(); },
+                matches(name) { return this.q === '' || name.toLowerCase().includes(this.ql()); },
+                /**
+                 * A DB row is visible when:
+                 *  - no search query, OR
+                 *  - its own name matches, OR
+                 *  - any of its (loaded) child tables/views matches.
+                 * The child list is embedded on the row's data-children attr.
+                 */
+                dbVisible(el, dbName) {
+                    if (this.q === '') return true;
+                    if (dbName.toLowerCase().includes(this.ql())) return true;
+                    const children = (el.dataset.children || '').split('|');
+                    return children.some(c => c !== '' && c.includes(this.ql()));
+                },
+                /** A child row is visible when no query, OR its DB name matches (show all its tables), OR its own name matches. */
+                childVisible(dbName, childName) {
+                    if (this.q === '') return true;
+                    if (dbName.toLowerCase().includes(this.ql())) return true;
+                    return childName.toLowerCase().includes(this.ql());
+                }
+             }"
+             @keydown.escape="q = ''">
             <div class="sticky top-0 z-10 bg-white border-b border-zinc-100 p-3">
                 <div class="text-xs uppercase tracking-wide text-zinc-500 mb-2 font-semibold">
                     {{ $currentLabel }}
                 </div>
                 <input x-model="q" type="search" placeholder="Filter databases & tables…"
                     class="w-full rounded-md border border-zinc-300 px-2.5 py-1.5 text-sm" />
+                <p x-show="q !== ''" x-cloak class="mt-2 text-[10px] text-zinc-400 italic">
+                    Tables outside an expanded database are not searchable — expand the DB first.
+                </p>
             </div>
 
             <div class="p-3 space-y-0.5">
                 @forelse ($databases as $db)
+                    @php
+                        $childNames = array_map(
+                            static fn ($t) => strtolower($t->name),
+                            array_merge($tablesByDb[$db] ?? [], $viewsByDb[$db] ?? []),
+                        );
+                    @endphp
                     <div data-name="{{ strtolower($db) }}"
-                        x-show="q === '' || '{{ strtolower($db) }}'.includes(q.toLowerCase())">
+                        data-children="{{ implode('|', $childNames) }}"
+                        x-show="dbVisible($el, @js($db))">
                         <button type="button" wire:click="toggleDatabase('{{ $db }}')"
                             class="cursor-pointer w-full flex items-center gap-1.5 px-2 py-1 text-left text-sm rounded hover:bg-zinc-50 {{ $selectedDatabase === $db ? 'text-zinc-900 font-medium' : 'text-zinc-700' }}">
                             <svg class="size-3 text-zinc-400 transition-transform {{ in_array($db, $expanded) ? 'rotate-90' : '' }}"
@@ -32,7 +66,7 @@
                                 @foreach ($tablesByDb[$db] ?? [] as $t)
                                     <button type="button"
                                         wire:click="selectTable('{{ $db }}', '{{ $t->name }}', {{ $t->schema ? "'".$t->schema."'" : 'null' }})"
-                                        x-show="q === '' || '{{ strtolower($t->name) }}'.includes(q.toLowerCase())"
+                                        x-show="childVisible(@js($db), @js($t->name))"
                                         class="cursor-pointer w-full flex items-center gap-1.5 px-2 py-0.5 text-left text-xs rounded hover:bg-zinc-50 {{ $selectedDatabase === $db && $selectedTable === $t->name ? 'bg-zinc-100 text-zinc-900 font-medium' : 'text-zinc-600' }}">
                                         <svg class="size-3 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
@@ -44,7 +78,7 @@
                                 @foreach ($viewsByDb[$db] ?? [] as $v)
                                     <button type="button"
                                         wire:click="selectTable('{{ $db }}', '{{ $v->name }}', {{ $v->schema ? "'".$v->schema."'" : 'null' }})"
-                                        x-show="q === '' || '{{ strtolower($v->name) }}'.includes(q.toLowerCase())"
+                                        x-show="childVisible(@js($db), @js($v->name))"
                                         class="cursor-pointer w-full flex items-center gap-1.5 px-2 py-0.5 text-left text-xs rounded hover:bg-zinc-50 {{ $selectedDatabase === $db && $selectedTable === $v->name ? 'bg-zinc-100 text-zinc-900 font-medium' : 'text-zinc-600' }}">
                                         <svg class="size-3 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
