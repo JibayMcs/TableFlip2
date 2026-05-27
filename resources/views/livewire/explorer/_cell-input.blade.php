@@ -11,7 +11,7 @@
     $required = $column && ! $column->nullable && $column->default === null && ! $column->autoIncrement;
 
     $base = 'w-full text-xs font-mono border rounded px-1.5 py-1 focus:outline-none focus:border-zinc-900 '
-        .($required ? 'border-rose-300' : 'border-zinc-300');
+        .($required ? 'border-rose-300' : 'border-zinc-300 dark:border-zinc-700');
 
     $inlineAttrs = $inlineEdit
         ? 'x-init="$el.focus(); typeof $el.select === \'function\' && $el.select()"'

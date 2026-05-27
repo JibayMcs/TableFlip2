@@ -11,11 +11,11 @@
             </h1>
 
             @if ($active)
-                <div class="rounded-md border border-zinc-200 bg-white p-4 flex items-center gap-3">
+                <div class="rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 flex items-center gap-3">
                     <span class="inline-block size-3 rounded-full" style="background-color: {{ $active->color }}"></span>
                     <div class="flex-1">
                         <div class="font-medium">{{ $active->name }}</div>
-                        <div class="text-xs text-zinc-500 font-mono">
+                        <div class="text-xs text-zinc-500 dark:text-zinc-400 font-mono">
                             {{ $active->driver === 'sqlite'
                                 ? $active->database
                                 : ($active->username . '@' . $active->host . ($active->port ? ':' . $active->port : '') . ($active->database ? '/' . $active->database : '')) }}
@@ -27,18 +27,18 @@
                     </a>
                 </div>
             @else
-                <p class="text-zinc-600 max-w-2xl">
+                <p class="text-zinc-600 dark:text-zinc-400 max-w-2xl">
                     No active connection.
-                    <a href="{{ route('connections.index') }}" wire:navigate class="text-zinc-900 underline">Pick one</a>
+                    <a href="{{ route('connections.index') }}" wire:navigate class="text-zinc-900 dark:text-zinc-100 underline">Pick one</a>
                     or
-                    <a href="{{ route('connections.create') }}" wire:navigate class="text-zinc-900 underline">create a new one</a>
+                    <a href="{{ route('connections.create') }}" wire:navigate class="text-zinc-900 dark:text-zinc-100 underline">create a new one</a>
                     to get started.
                 </p>
             @endif
         @elseauth('db_session')
             @php($u = auth('db_session')->user())
             <h1 class="text-2xl font-semibold tracking-tight">Connected directly.</h1>
-            <p class="text-zinc-600 mb-4">
+            <p class="text-zinc-600 dark:text-zinc-400 mb-4">
                 Active connection: <code class="font-mono text-sm">{{ $u->label() }}</code>
             </p>
             <a href="{{ route('explorer') }}" wire:navigate

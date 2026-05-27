@@ -45,56 +45,94 @@ export interface EditorHandle {
     destroy(): void;
 }
 
+function isDark(): boolean {
+    return typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
+}
+
 /**
- * Light, project-themed editor styling. Backgrounds and borders match the
- * Tailwind palette used everywhere else (zinc 50/200/900) so the editor
+ * Project-themed editor styling. Backgrounds and borders match the Tailwind
+ * palette (zinc 50/200/900 in light, zinc 900/800/100 in dark) so the editor
  * blends into the surrounding panels.
+ *
+ * The theme is built fresh at editor creation time — there's no live theme
+ * switching (the user toggles in /profile which triggers a full reload).
  */
-const lightTheme = EditorView.theme(
-    {
-        '&': {
-            height: '100%',
-            fontSize: '13px',
-            backgroundColor: '#ffffff',
-            color: '#18181b',
+function projectTheme() {
+    const dark = isDark();
+    const c = dark
+        ? {
+              bg: '#18181b',
+              fg: '#f4f4f5',
+              caret: '#fafafa',
+              gutterBg: '#27272a',
+              gutterFg: '#52525b',
+              gutterBorder: '#3f3f46',
+              activeGutterBg: '#3f3f46',
+              activeGutterFg: '#a1a1aa',
+              selection: '#1e40af',
+              tooltipBg: '#27272a',
+              tooltipBorder: '#3f3f46',
+              tooltipSelectedBg: '#3b82f6',
+              tooltipSelectedFg: '#ffffff',
+          }
+        : {
+              bg: '#ffffff',
+              fg: '#18181b',
+              caret: '#18181b',
+              gutterBg: '#fafafa',
+              gutterFg: '#a1a1aa',
+              gutterBorder: '#e4e4e7',
+              activeGutterBg: '#f4f4f5',
+              activeGutterFg: '#52525b',
+              selection: '#bfdbfe',
+              tooltipBg: '#ffffff',
+              tooltipBorder: '#e4e4e7',
+              tooltipSelectedBg: '#18181b',
+              tooltipSelectedFg: '#ffffff',
+          };
+
+    return EditorView.theme(
+        {
+            '&': {
+                height: '100%',
+                fontSize: '13px',
+                backgroundColor: c.bg,
+                color: c.fg,
+            },
+            '.cm-scroller': { fontFamily: "'Fira Code', ui-monospace, SFMono-Regular, monospace" },
+            '.cm-content': {
+                caretColor: c.caret,
+                userSelect: 'text',
+                WebkitUserSelect: 'text',
+            },
+            '.cm-gutters': {
+                backgroundColor: c.gutterBg,
+                color: c.gutterFg,
+                borderRight: `1px solid ${c.gutterBorder}`,
+            },
+            '.cm-activeLineGutter': { backgroundColor: c.activeGutterBg, color: c.activeGutterFg },
+            '.cm-selectionLayer': { zIndex: '1' },
+            '.cm-selectionBackground, &.cm-focused .cm-selectionBackground, .cm-content ::selection': {
+                backgroundColor: c.selection,
+            },
+            '.cm-cursor': { borderLeftColor: c.caret },
+            '.cm-tooltip-autocomplete': {
+                border: `1px solid ${c.tooltipBorder}`,
+                borderRadius: '6px',
+                backgroundColor: c.tooltipBg,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
+                fontFamily: 'inherit',
+                fontSize: '12px',
+                color: c.fg,
+            },
+            '.cm-tooltip-autocomplete > ul > li[aria-selected]': {
+                backgroundColor: c.tooltipSelectedBg,
+                color: c.tooltipSelectedFg,
+            },
         },
-        '.cm-scroller': { fontFamily: "'Fira Code', ui-monospace, SFMono-Regular, monospace" },
-        // Defensive: re-enable text selection in case a `select-none` rule
-        // somewhere in the cascade silently disabled it (Tailwind reset, parent
-        // utility class…).
-        '.cm-content': {
-            caretColor: '#18181b',
-            userSelect: 'text',
-            WebkitUserSelect: 'text',
-        },
-        '.cm-gutters': {
-            backgroundColor: '#fafafa',
-            color: '#a1a1aa',
-            borderRight: '1px solid #e4e4e7',
-        },
-        '.cm-activeLineGutter': { backgroundColor: '#f4f4f5', color: '#52525b' },
-        // Push the selection layer above the text/active-line backgrounds so
-        // drag-selected ranges are visible.
-        '.cm-selectionLayer': { zIndex: '1' },
-        '.cm-selectionBackground, &.cm-focused .cm-selectionBackground, .cm-content ::selection': {
-            backgroundColor: '#bfdbfe',
-        },
-        '.cm-cursor': { borderLeftColor: '#18181b' },
-        '.cm-tooltip-autocomplete': {
-            border: '1px solid #e4e4e7',
-            borderRadius: '6px',
-            backgroundColor: '#ffffff',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
-            fontFamily: 'inherit',
-            fontSize: '12px',
-        },
-        '.cm-tooltip-autocomplete > ul > li[aria-selected]': {
-            backgroundColor: '#18181b',
-            color: '#ffffff',
-        },
-    },
-    { dark: false },
-);
+        { dark },
+    );
+}
 
 export function createSqlEditor(opts: CreateEditorOptions): EditorHandle {
     const sqlCompartment = new Compartment();
@@ -134,7 +172,7 @@ export function createSqlEditor(opts: CreateEditorOptions): EditorHandle {
             ]),
             sqlCompartment.of(buildSqlExtension(opts.dialect ?? 'mysql', opts.schema ?? {}, opts.defaultTable)),
             syntaxHighlighting(defaultHighlightStyle),
-            lightTheme,
+            projectTheme(),
             EditorView.updateListener.of((update) => {
                 if (update.docChanged && opts.onChange) {
                     opts.onChange(update.state.doc.toString());

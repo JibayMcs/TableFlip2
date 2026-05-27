@@ -1,5 +1,9 @@
 @import 'tailwindcss';
 
+/* Dark mode: opt-in via class on <html> instead of prefers-color-scheme
+   so users can pick a theme that overrides their OS preference. */
+@variant dark (&:where(.dark, .dark *));
+
 [x-cloak] { display: none !important; }
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';

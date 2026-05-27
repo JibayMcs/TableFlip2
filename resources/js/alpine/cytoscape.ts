@@ -66,20 +66,55 @@ function layoutFor(name: string): LayoutOptions {
     }
 }
 
+function isDark(): boolean {
+    return document.documentElement.classList.contains('dark');
+}
+
+function palette() {
+    return isDark()
+        ? {
+              nodeBg: '#18181b',         // zinc-900
+              nodeBorder: '#3f3f46',     // zinc-700
+              nodeText: '#f4f4f5',       // zinc-100
+              nodeSelectedBg: '#1e3a8a', // blue-900
+              nodeSelectedBorder: '#3b82f6', // blue-500
+              nodeHighlightBg: '#14532d', // green-900
+              nodeHighlightBorder: '#22c55e', // green-500
+              edgeColor: '#52525b',      // zinc-600
+              edgeHighlight: '#3b82f6',
+              labelBg: '#18181b',
+              labelColor: '#d4d4d8',
+          }
+        : {
+              nodeBg: '#ffffff',
+              nodeBorder: '#d4d4d8',
+              nodeText: '#18181b',
+              nodeSelectedBg: '#eff6ff',
+              nodeSelectedBorder: '#2563eb',
+              nodeHighlightBg: '#f0fdf4',
+              nodeHighlightBorder: '#16a34a',
+              edgeColor: '#a1a1aa',
+              edgeHighlight: '#2563eb',
+              labelBg: '#ffffff',
+              labelColor: '#3f3f46',
+          };
+}
+
 function styleSheet(): cytoscape.Stylesheet[] {
+    const p = palette();
     return [
         {
             selector: 'node',
             style: {
                 shape: 'round-rectangle',
-                'background-color': '#ffffff',
-                'border-color': '#d4d4d8',
+                'background-color': p.nodeBg,
+                'border-color': p.nodeBorder,
                 'border-width': 1,
                 'corner-radius': '6',
                 label: 'data(label)',
                 'text-valign': 'center',
                 'text-halign': 'center',
-                color: '#18181b',
+                color: p.nodeText,
                 'font-family': 'Instrument Sans, ui-sans-serif, system-ui, sans-serif',
                 'font-size': 12,
                 'font-weight': 500,
@@ -97,9 +132,9 @@ function styleSheet(): cytoscape.Stylesheet[] {
         {
             selector: 'node:selected',
             style: {
-                'border-color': '#2563eb',
+                'border-color': p.nodeSelectedBorder,
                 'border-width': 2,
-                'background-color': '#eff6ff',
+                'background-color': p.nodeSelectedBg,
             } as cytoscape.Css.Node,
         },
         {
@@ -109,17 +144,17 @@ function styleSheet(): cytoscape.Stylesheet[] {
         {
             selector: 'node.highlight',
             style: {
-                'border-color': '#16a34a',
+                'border-color': p.nodeHighlightBorder,
                 'border-width': 2,
-                'background-color': '#f0fdf4',
+                'background-color': p.nodeHighlightBg,
             } as cytoscape.Css.Node,
         },
         {
             selector: 'edge',
             style: {
                 width: 1.2,
-                'line-color': '#a1a1aa',
-                'target-arrow-color': '#a1a1aa',
+                'line-color': p.edgeColor,
+                'target-arrow-color': p.edgeColor,
                 'target-arrow-shape': 'triangle',
                 'curve-style': 'bezier',
                 'arrow-scale': 1,
@@ -130,15 +165,15 @@ function styleSheet(): cytoscape.Stylesheet[] {
             selector: 'edge:selected, edge.highlight',
             style: {
                 width: 2,
-                'line-color': '#2563eb',
-                'target-arrow-color': '#2563eb',
+                'line-color': p.edgeHighlight,
+                'target-arrow-color': p.edgeHighlight,
                 opacity: 1,
                 label: 'data(label)',
                 'font-size': 9,
-                'text-background-color': '#ffffff',
+                'text-background-color': p.labelBg,
                 'text-background-opacity': 0.9,
                 'text-background-padding': '2px',
-                color: '#3f3f46',
+                color: p.labelColor,
             } as cytoscape.Css.Edge,
         },
         {
