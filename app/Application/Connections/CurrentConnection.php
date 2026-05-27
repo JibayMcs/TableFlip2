@@ -44,6 +44,20 @@ class CurrentConnection
         return null;
     }
 
+    /**
+     * The saved DatabaseConnection id for the active session, or null when the
+     * user is connected directly (db_session guard). Used by the export
+     * launcher because the queue worker can only replay saved connections.
+     */
+    public function connectionId(): ?int
+    {
+        if (Auth::guard('web')->check()) {
+            return $this->resolver->currentId();
+        }
+
+        return null;
+    }
+
     public function label(): string
     {
         if (Auth::guard('web')->check()) {

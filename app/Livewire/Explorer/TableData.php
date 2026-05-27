@@ -171,6 +171,8 @@ class TableData extends Component
             $this->table => array_keys($columnDefs),
         ];
         $dialectName = $driver->getDriverName();
+        $exportConnectionId = $current->connectionId();
+        $exportSourcePayload = $this->buildExportSourcePayload();
 
         // ── Custom SQL scratch pad takes priority over the natural query ──
         // Rows were captured at execution time (see HasSqlScratchPad::applySqlResult)
@@ -189,6 +191,9 @@ class TableData extends Component
                 'totalPages' => 1,
                 'autocompleteSchema' => $autocompleteSchema,
                 'dialect' => $dialectName,
+                'exportConnectionId' => $exportConnectionId,
+                'exportSourceKind' => 'raw_sql',
+                'exportSourcePayload' => ['sql' => $this->customSql],
             ]);
         }
 
@@ -237,7 +242,31 @@ class TableData extends Component
             'totalPages' => $totalPages,
             'autocompleteSchema' => $autocompleteSchema,
             'dialect' => $dialectName,
+            'exportConnectionId' => $exportConnectionId,
+            'exportSourceKind' => 'table',
+            'exportSourcePayload' => $exportSourcePayload,
         ]);
+    }
+
+    /**
+     * Build the source payload used by the export launcher in natural mode.
+     * Only meaningful filters/sort are included so the worker rebuilds the
+     * exact same SELECT (minus pagination — exports stream all rows).
+     *
+     * @return array<string, mixed>
+     */
+    private function buildExportSourcePayload(): array
+    {
+        return [
+            'name' => $this->table,
+            'schema' => $this->schema,
+            'database' => $this->database,
+            'filters' => array_values(array_filter(
+                $this->filters,
+                static fn (array $f) => ($f['column'] ?? '') !== '',
+            )),
+            'sort' => $this->sort,
+        ];
     }
 
     /**
@@ -257,6 +286,9 @@ class TableData extends Component
             'totalPages' => 1,
             'autocompleteSchema' => [],
             'dialect' => 'mysql',
+            'exportConnectionId' => null,
+            'exportSourceKind' => 'table',
+            'exportSourcePayload' => [],
         ];
     }
 

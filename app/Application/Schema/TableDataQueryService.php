@@ -143,4 +143,34 @@ class TableDataQueryService
     {
         return str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $value);
     }
+
+    /**
+     * Same WHERE/ORDER BY/LIMIT/OFFSET pipeline as {@see query()} but returns
+     * the SQL string + bindings without executing. Used by the export pipeline
+     * which streams rows itself via the driver's streamSelect().
+     *
+     * @param  list<Filter>  $filters
+     * @param  list<Sort>  $sort
+     * @return array{0: string, 1: array<int, mixed>}
+     */
+    public function buildSelectForExport(
+        DatabaseDriverInterface $driver,
+        TableIdentifier $table,
+        array $filters = [],
+        array $sort = [],
+        int $page = 1,
+        int $perPage = 1_000_000_000,
+    ): array {
+        $qualified = $driver->qualify($table);
+        [$whereClause, $bindings] = $this->buildWhere($driver, $filters);
+        $orderClause = $this->buildOrder($driver, $sort);
+
+        $page = max(1, $page);
+        $perPage = max(1, $perPage);
+        $offset = ($page - 1) * $perPage;
+
+        $sql = "SELECT * FROM {$qualified}{$whereClause}{$orderClause} LIMIT {$perPage} OFFSET {$offset}";
+
+        return [$sql, $bindings];
+    }
 }

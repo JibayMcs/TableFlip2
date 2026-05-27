@@ -80,6 +80,25 @@ abstract class AbstractDatabaseDriver implements DatabaseDriverInterface
         );
     }
 
+    public function streamSelect(string $sql, array $bindings = []): \Generator
+    {
+        try {
+            $pdo = $this->connection()->getPdo();
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute($bindings);
+        } catch (Throwable $e) {
+            throw new QueryExecutionException($e->getMessage(), $sql, $bindings, $e);
+        }
+
+        // PDO::FETCH_ASSOC returns one row at a time on each fetch() call —
+        // no buffering of the whole result set in PHP-land.
+        while (($row = $stmt->fetch(\PDO::FETCH_ASSOC)) !== false) {
+            yield $row;
+        }
+
+        $stmt->closeCursor();
+    }
+
     public function statement(string $sql, array $bindings = []): int
     {
         try {

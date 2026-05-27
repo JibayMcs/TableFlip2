@@ -31,6 +31,8 @@
                                 <a href="{{ route('sql') }}" wire:navigate class="hover:text-zinc-900 data-current:text-zinc-900 data-current:font-medium">SQL</a>
                             @endif
 
+                            <a href="{{ route('exports.index') }}" wire:navigate class="hover:text-zinc-900 data-current:text-zinc-900 data-current:font-medium">Exports</a>
+
                             <livewire:navbar.connection-switcher />
 
                             <a href="{{ route('profile') }}" wire:navigate class="hover:text-zinc-900 data-current:text-zinc-900 data-current:font-medium">

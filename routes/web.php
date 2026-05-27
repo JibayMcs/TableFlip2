@@ -6,7 +6,10 @@ use App\Livewire\Auth\Profile;
 use App\Livewire\Connections\Form as ConnectionForm;
 use App\Livewire\Connections\Index as ConnectionsIndex;
 use App\Livewire\Explorer\Index as ExplorerIndex;
+use App\Livewire\Exports\Index as ExportsIndex;
 use App\Livewire\Sql\Editor as SqlEditor;
+use App\Models\Export;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
@@ -39,6 +42,18 @@ Route::middleware('auth:web')->group(function () {
         Route::get('/new', ConnectionForm::class)->name('create');
         Route::get('/{connection}/edit', ConnectionForm::class)->name('edit');
     });
+
+    Route::get('/exports', ExportsIndex::class)->name('exports.index');
+    Route::get('/exports/{export}/download', function (Export $export, \Illuminate\Http\Request $request) {
+        abort_unless($request->hasValidSignature(), 403);
+        abort_unless($export->user_identifier === (string) Auth::id(), 404);
+        abort_unless($export->isCompleted() && $export->file_path !== null, 404);
+
+        $disk = Storage::disk((string) config('tableflip.exports.disk', 'local'));
+        abort_unless($disk->exists($export->file_path), 404);
+
+        return $disk->download($export->file_path, $export->file_name);
+    })->name('exports.download');
 });
 
 Route::middleware(['auth:web', 'role:admin'])->prefix('admin')->name('admin.')->group(function () {

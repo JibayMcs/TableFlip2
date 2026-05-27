@@ -27,6 +27,18 @@ return [
         'bulk_confirm_threshold' => (int) env('TABLEFLIP_BULK_OP_CONFIRM_THRESHOLD', 10),
     ],
 
+    'exports' => [
+        // Filesystem disk used to store generated export files.
+        'disk' => (string) env('TABLEFLIP_EXPORTS_DISK', 'local'),
+
+        // Days an export file stays downloadable before the cleanup command
+        // wipes it (and the row).
+        'retention_days' => (int) env('TABLEFLIP_EXPORTS_RETENTION_DAYS', 7),
+
+        // Validity window of the signed download URL.
+        'download_url_ttl_minutes' => (int) env('TABLEFLIP_EXPORTS_DOWNLOAD_TTL', 30),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Allowed direct-DB connection scope

@@ -238,6 +238,27 @@ class Editor extends Component
         $history->deleteEntry($id);
     }
 
+    /**
+     * Pushes the latest editor content into the embedded Launcher and opens
+     * its modal. We can't rely on the Launcher's own props because they
+     * snapshot at mount time — the SQL evolves with each keystroke.
+     */
+    public function openExportLauncher(): void
+    {
+        $sql = trim($this->currentSql);
+        if ($sql === '') {
+            return;
+        }
+
+        $title = Str::limit(trim(strtok($sql, "\n") ?: 'query'), 40, '');
+        $this->dispatch(
+            'show-export-launcher',
+            sourceKind: 'raw_sql',
+            sourcePayload: ['sql' => $sql],
+            defaultFileName: $title !== '' ? $title : 'query',
+        )->to(\App\Livewire\Exports\Launcher::class);
+    }
+
     public function clearAllHistory(QueryHistoryService $history): void
     {
         $history->clearAll();
@@ -274,6 +295,7 @@ class Editor extends Component
             'schema' => $schema,
             'dialect' => $dialect,
             'history' => $history->recent($this->historySearch),
+            'exportConnectionId' => $current->connectionId(),
         ]);
     }
 

@@ -38,7 +38,16 @@
             <button type="button" wire:click="newTab"
                 class="px-3 py-1.5 text-xs text-zinc-500 hover:text-zinc-900 hover:bg-zinc-50">+ New tab</button>
 
-            <div class="ml-auto pr-3">
+            <div class="ml-auto pr-3 flex items-center gap-2">
+                @if ($exportConnectionId !== null)
+                    <button type="button" wire:click="openExportLauncher"
+                        x-tooltip.bottom="Export current query"
+                        class="size-8 inline-flex items-center justify-center rounded-md border border-zinc-300 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50 transition-colors">
+                        <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                        </svg>
+                    </button>
+                @endif
                 <button type="button" wire:click="executeActive(null)"
                     wire:loading.attr="disabled" wire:target="executeActive"
                     x-tooltip.left="Run query (⌘/Ctrl+↵)"
@@ -53,6 +62,17 @@
                 </button>
             </div>
         </div>
+
+        @if ($exportConnectionId !== null)
+            <livewire:exports.launcher
+                wire:key="sql-export-launcher"
+                source-kind="raw_sql"
+                :source-payload="['sql' => $currentSql]"
+                default-file-name="query"
+                :connection-id="$exportConnectionId"
+                :database-name="$currentDatabase"
+                :external="true" />
+        @endif
 
         {{-- Editor --}}
         @php

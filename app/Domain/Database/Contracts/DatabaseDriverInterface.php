@@ -67,6 +67,16 @@ interface DatabaseDriverInterface
     public function select(string $sql, array $bindings = []): QueryResult;
 
     /**
+     * Yield rows one by one without buffering the whole result set in memory.
+     * Used by exporters and any caller that needs to iterate a potentially
+     * huge SELECT.
+     *
+     * @param  array<int|string, mixed>  $bindings
+     * @return \Generator<int, array<string, mixed>>
+     */
+    public function streamSelect(string $sql, array $bindings = []): \Generator;
+
+    /**
      * @param  array<int|string, mixed>  $bindings
      */
     public function statement(string $sql, array $bindings = []): int;

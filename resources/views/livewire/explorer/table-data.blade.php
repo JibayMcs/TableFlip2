@@ -123,6 +123,15 @@
             @endif
         </div>
         <div class="flex items-center gap-3 text-xs text-zinc-500">
+            @if (! $error && $exportConnectionId !== null)
+                <livewire:exports.launcher
+                    wire:key="export-launcher-{{ $mode }}-{{ $table }}"
+                    :source-kind="$exportSourceKind"
+                    :source-payload="$exportSourcePayload"
+                    :default-file-name="$table"
+                    :connection-id="$exportConnectionId"
+                    :database-name="$database" />
+            @endif
             <span><span class="font-mono font-medium text-zinc-700">{{ number_format($total) }}</span> rows</span>
             @if ($mode === 'natural')
                 <label class="flex items-center gap-1">
