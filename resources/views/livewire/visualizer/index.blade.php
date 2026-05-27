@@ -27,9 +27,9 @@
         <span class="text-zinc-300 dark:text-zinc-700">/</span>
 
         <label class="flex items-center gap-1">
-            <span class="text-zinc-500 dark:text-zinc-400">Database</span>
+            <span class="text-zinc-500 dark:text-zinc-400">{{ __('visualizer.database') }}</span>
             <select wire:model="database" class="text-xs border border-zinc-300 dark:border-zinc-700 rounded px-1.5 py-1">
-                <option value="">— pick —</option>
+                <option value="">{{ __('visualizer.pick') }}</option>
                 @foreach ($databases as $db)
                     <option value="{{ $db }}">{{ $db }}</option>
                 @endforeach
@@ -38,15 +38,15 @@
 
         <label class="flex items-center gap-1.5 text-zinc-700 dark:text-zinc-300">
             <input type="checkbox" wire:model="compact" class="rounded border-zinc-300 dark:border-zinc-700" />
-            Compact (PK + FK only)
+            {{ __('visualizer.compact_label') }}
         </label>
 
         <label class="flex items-center gap-1">
-            <span class="text-zinc-500 dark:text-zinc-400">Layout</span>
+            <span class="text-zinc-500 dark:text-zinc-400">{{ __('visualizer.layout') }}</span>
             <select wire:model.live="layout" class="text-xs border border-zinc-300 dark:border-zinc-700 rounded px-1.5 py-1">
-                <option value="dagre">dagre (hierarchical)</option>
-                <option value="fcose">fcose (force-directed, fast)</option>
-                <option value="cose">cose-bilkent (organic)</option>
+                <option value="dagre">{{ __('visualizer.layout_dagre') }}</option>
+                <option value="fcose">{{ __('visualizer.layout_fcose') }}</option>
+                <option value="cose">{{ __('visualizer.layout_cose') }}</option>
             </select>
         </label>
 
@@ -60,23 +60,23 @@
                 <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" stroke-opacity="0.25"/>
                 <path d="M21 12a9 9 0 00-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
             </svg>
-            <span wire:loading.remove wire:target="generate">Generate diagram</span>
-            <span wire:loading wire:target="generate">Generating…</span>
+            <span wire:loading.remove wire:target="generate">{{ __('visualizer.generate') }}</span>
+            <span wire:loading wire:target="generate">{{ __('visualizer.generating') }}</span>
         </button>
 
         @if ($tableCount > 0)
             <div class="ml-auto flex items-center gap-2">
-                <input type="search" x-model.debounce.200ms="search" placeholder="Highlight table…"
+                <input type="search" x-model.debounce.200ms="search" placeholder="{{ __('visualizer.highlight_placeholder') }}"
                     class="w-40 rounded border border-zinc-300 dark:border-zinc-700 px-2 py-1 text-xs" />
                 <span class="text-zinc-500 dark:text-zinc-400">
-                    <span class="font-mono text-zinc-700 dark:text-zinc-300">{{ $tableCount }}</span> entities ·
-                    <span class="font-mono text-zinc-700 dark:text-zinc-300">{{ $relationshipCount }}</span> relationships
+                    <span class="font-mono text-zinc-700 dark:text-zinc-300">{{ $tableCount }}</span> {{ __('visualizer.entities') }} ·
+                    <span class="font-mono text-zinc-700 dark:text-zinc-300">{{ $relationshipCount }}</span> {{ __('visualizer.relationships') }}
                     @if (count($skippedTables) > 0)
-                        · <span class="text-amber-700" x-tooltip.bottom="{{ implode(', ', $skippedTables) }}">{{ count($skippedTables) }} skipped</span>
+                        · <span class="text-amber-700" x-tooltip.bottom="{{ implode(', ', $skippedTables) }}">{{ count($skippedTables) }} {{ __('visualizer.skipped') }}</span>
                     @endif
                 </span>
                 <button type="button" @click="fit()"
-                    x-tooltip.bottom="Fit diagram to viewport"
+                    x-tooltip.bottom="{{ __('visualizer.fit_tooltip') }}"
                     class="inline-flex items-center justify-center size-7 rounded border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-50 dark:bg-zinc-950">
                     <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="15 3 21 3 21 9"/>
@@ -117,8 +117,8 @@
                         <line x1="18" y1="8" x2="18" y2="16" stroke-width="1.5"/>
                         <line x1="8" y1="18" x2="16" y2="18" stroke-width="1.5"/>
                     </svg>
-                    Pick a database and click <span class="font-medium text-zinc-700 dark:text-zinc-300 mx-1">Generate</span> to render the schema diagram.
-                    <p class="mt-2 text-xs text-zinc-400 dark:text-zinc-500 max-w-md">Tip : enable <em>Compact</em> on huge schemas (200+ tables) to keep PK + FK columns only. Click a node to highlight its relationships, drag nodes to rearrange.</p>
+                    {!! __('visualizer.placeholder_title', ['action' => '<span class="font-medium text-zinc-700 dark:text-zinc-300 mx-1">'.e(__('visualizer.placeholder_action')).'</span>']) !!}
+                    <p class="mt-2 text-xs text-zinc-400 dark:text-zinc-500 max-w-md">{!! __('visualizer.placeholder_hint', ['compact' => '<em>'.e(__('visualizer.placeholder_compact_word')).'</em>']) !!}</p>
                 </div>
             @else
                 <div x-ref="diagram"
@@ -141,7 +141,7 @@
                     <p class="text-[10px] font-mono text-zinc-500 dark:text-zinc-400" x-text="selected.qualified"></p>
                     <p class="text-xs text-zinc-500 dark:text-zinc-400">
                         <span x-text="selected.visibleColumnCount"></span> /
-                        <span x-text="selected.columnCount"></span> columns
+                        <span x-text="selected.columnCount"></span> {{ __('visualizer.side_panel.columns_of') }}
                     </p>
                     <ul class="space-y-px text-xs font-mono">
                         <template x-for="col in (selected.columns || [])" :key="col.name">

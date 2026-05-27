@@ -1,6 +1,6 @@
 <div>
     @if ($connections->isEmpty())
-        <a href="{{ route('connections.index') }}" wire:navigate class="hover:text-zinc-900 dark:text-zinc-100">Connections</a>
+        <a href="{{ route('connections.index') }}" wire:navigate class="hover:text-zinc-900 dark:text-zinc-100">{{ __('connections.title') }}</a>
     @else
         <div x-data="{ open: false }" @click.outside="open = false" @keydown.escape.window="open = false" class="relative">
             <button type="button" @click="open = !open"
@@ -11,7 +11,7 @@
                     <span class="font-mono text-xs text-zinc-500 dark:text-zinc-400">{{ $active->driver }}</span>
                 @else
                     <span class="size-2 rounded-full bg-zinc-300"></span>
-                    <span class="text-zinc-500 dark:text-zinc-400">No active connection</span>
+                    <span class="text-zinc-500 dark:text-zinc-400">{{ __('connections.switcher.no_active') }}</span>
                 @endif
                 <svg class="size-3 text-zinc-400 dark:text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
@@ -40,12 +40,12 @@
                     @if ($active)
                         <button type="button" wire:click="deactivate" @click="open = false"
                             class="w-full text-left px-3 py-2 text-xs text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:bg-zinc-950">
-                            Disconnect current
+                            {{ __('connections.switcher.disconnect_current') }}
                         </button>
                     @endif
                     <a href="{{ route('connections.index') }}" wire:navigate
                         class="block px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:bg-zinc-950">
-                        Manage connections →
+                        {{ __('connections.switcher.manage') }} →
                     </a>
                 </div>
             </div>

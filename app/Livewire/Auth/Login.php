@@ -12,6 +12,7 @@ use Illuminate\Auth\AuthenticationException;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cookie;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
@@ -136,15 +137,28 @@ class Login extends Component
             'password' => ['required'],
         ]);
 
+        // Rate-limit by IP + email so credential stuffing is throttled.
+        // 5 failed attempts per minute → 1 min lockout; the limiter key is
+        // hit() on failure and cleared on success.
+        $rateKey = 'login.account|'.request()->ip().'|'.strtolower($this->email);
+        if (RateLimiter::tooManyAttempts($rateKey, 5)) {
+            $seconds = RateLimiter::availableIn($rateKey);
+            throw ValidationException::withMessages([
+                'email' => __('Too many login attempts. Try again in :sec seconds.', ['sec' => $seconds]),
+            ]);
+        }
+
         $ok = Auth::guard('web')->attempt(
             ['email' => $this->email, 'password' => $this->password, 'is_active' => true],
             $this->remember,
         );
 
         if (! $ok) {
+            RateLimiter::hit($rateKey, 60);
             throw ValidationException::withMessages(['email' => __('These credentials do not match our records.')]);
         }
 
+        RateLimiter::clear($rateKey);
         request()->session()->regenerate();
 
         $this->redirect('/', navigate: true);
@@ -171,6 +185,17 @@ class Login extends Component
 
         $this->validate($rules);
 
+        // Throttle direct-DB attempts the same way as account login — the
+        // back-end DB will lock the user out faster than us but this saves
+        // round-trips and load on the target server.
+        $rateKey = 'login.direct|'.request()->ip().'|'.$this->host.'|'.$this->username;
+        if (RateLimiter::tooManyAttempts($rateKey, 5)) {
+            $seconds = RateLimiter::availableIn($rateKey);
+            throw ValidationException::withMessages([
+                'directPassword' => __('Too many login attempts. Try again in :sec seconds.', ['sec' => $seconds]),
+            ]);
+        }
+
         $creds = new DirectDbCredentials(
             driver: $this->driver,
             host: $this->host,
@@ -183,8 +208,11 @@ class Login extends Component
         try {
             $user = $authenticator->authenticate($creds);
         } catch (AuthenticationException $e) {
+            RateLimiter::hit($rateKey, 60);
             throw ValidationException::withMessages(['directPassword' => $e->getMessage()]);
         }
+
+        RateLimiter::clear($rateKey);
 
         /** @var \App\Infrastructure\Auth\Guards\DbSessionGuard $guard */
         $guard = Auth::guard('db_session');

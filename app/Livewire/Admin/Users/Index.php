@@ -81,6 +81,9 @@ class Index extends Component
     public function render(): View
     {
         $users = User::query()
+            // Eager-load roles to avoid an N+1 in the table render
+            // ($u->roles is read inside the loop on every row).
+            ->with('roles:id,name')
             ->when($this->search !== '', fn ($q) => $q->where(function ($q): void {
                 $q->where('name', 'like', "%{$this->search}%")
                     ->orWhere('email', 'like', "%{$this->search}%");

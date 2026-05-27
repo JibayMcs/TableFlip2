@@ -30,10 +30,10 @@
                 <div class="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400 mb-2 font-semibold">
                     {{ $currentLabel }}
                 </div>
-                <input x-model="q" type="search" placeholder="Filter databases & tables…"
+                <input x-model="q" type="search" placeholder="{{ __('explorer.sidebar.filter_placeholder') }}"
                     class="w-full rounded-md border border-zinc-300 dark:border-zinc-700 px-2.5 py-1.5 text-sm" />
                 <p x-show="q !== ''" x-cloak class="mt-2 text-[10px] text-zinc-400 dark:text-zinc-500 italic">
-                    Tables outside an expanded database are not searchable — expand the DB first.
+                    {{ __('explorer.sidebar.expand_hint') }}
                 </p>
             </div>
 
@@ -60,7 +60,7 @@
                         @if (in_array($db, $expanded))
                             <div class="ml-5 mt-0.5 border-l border-zinc-100 dark:border-zinc-800 pl-2 space-y-px">
                                 @if (count($tablesByDb[$db] ?? []) === 0 && count($viewsByDb[$db] ?? []) === 0)
-                                    <div class="text-xs text-zinc-400 dark:text-zinc-500 px-2 py-1 italic">empty</div>
+                                    <div class="text-xs text-zinc-400 dark:text-zinc-500 px-2 py-1 italic">{{ __('explorer.sidebar.empty') }}</div>
                                 @endif
 
                                 @foreach ($tablesByDb[$db] ?? [] as $t)
@@ -92,7 +92,7 @@
                     </div>
                 @empty
                     <div class="text-xs text-zinc-400 dark:text-zinc-500 px-2 py-4 text-center">
-                        No databases visible.
+                        {{ __('explorer.sidebar.no_databases') }}
                     </div>
                 @endforelse
             </div>
@@ -107,7 +107,7 @@
                     <svg class="size-12 text-zinc-300 dark:text-zinc-700 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/>
                     </svg>
-                    Pick a database in the sidebar to start exploring.
+                    {{ __('explorer.pick_database') }}
                 </div>
             @else
                 {{-- Breadcrumbs --}}
@@ -130,11 +130,11 @@
                     <nav class="flex gap-1 -mb-px" aria-label="Tabs">
                         <button type="button" wire:click="setTab('schema')"
                             class="px-4 py-2 text-sm font-medium border-b-2 transition-colors {{ $tab === 'schema' ? 'border-zinc-900 text-zinc-900 dark:text-zinc-100' : 'border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:text-zinc-300' }}">
-                            Schema
+                            {{ __('explorer.tabs.schema') }}
                         </button>
                         <button type="button" wire:click="setTab('data')"
                             class="px-4 py-2 text-sm font-medium border-b-2 transition-colors {{ $tab === 'data' ? 'border-zinc-900 text-zinc-900 dark:text-zinc-100' : 'border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:text-zinc-300' }}">
-                            Data
+                            {{ __('explorer.tabs.data') }}
                         </button>
                     </nav>
                 </div>
@@ -152,33 +152,33 @@
                 @elseif ($detail)
                     {{-- Row count --}}
                     <div class="mb-6 inline-flex items-center gap-3 rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-sm">
-                        <span class="text-zinc-500 dark:text-zinc-400">Rows:</span>
+                        <span class="text-zinc-500 dark:text-zinc-400">{{ __('explorer.rows_label') }}</span>
                         @if ($rowCount !== null)
                             <span class="font-mono font-medium">{{ number_format($rowCount) }}</span>
                         @elseif ($rowCountFailed)
                             <span class="text-xs text-rose-600"
-                                @if ($rowCountError) x-tooltip.bottom="{{ $rowCountError }}" @endif>unable to count</span>
+                                @if ($rowCountError) x-tooltip.bottom="{{ $rowCountError }}" @endif>{{ __('explorer.unable_to_count') }}</span>
                         @else
                             <button wire:click="loadRowCount" wire:loading.attr="disabled" wire:target="loadRowCount"
                                 class="text-xs text-zinc-700 dark:text-zinc-300 underline hover:text-zinc-900 dark:text-zinc-100">
-                                <span wire:loading.remove wire:target="loadRowCount">Count rows</span>
-                                <span wire:loading wire:target="loadRowCount">Counting…</span>
+                                <span wire:loading.remove wire:target="loadRowCount">{{ __('explorer.count_rows') }}</span>
+                                <span wire:loading wire:target="loadRowCount">{{ __('explorer.counting') }}</span>
                             </button>
                         @endif
                     </div>
 
                     {{-- Columns --}}
                     <section class="mb-8">
-                        <h2 class="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">Columns ({{ count($detail['columns']) }})</h2>
+                        <h2 class="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">{{ __('explorer.columns_section') }} ({{ count($detail['columns']) }})</h2>
                         <div class="overflow-x-auto bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md">
                             <table class="w-full text-sm">
                                 <thead class="text-left text-xs uppercase text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-800">
                                     <tr>
-                                        <th class="px-3 py-2">Name</th>
-                                        <th class="px-3 py-2">Type</th>
-                                        <th class="px-3 py-2">Nullable</th>
-                                        <th class="px-3 py-2">Default</th>
-                                        <th class="px-3 py-2">Notes</th>
+                                        <th class="px-3 py-2">{{ __('explorer.table_headers.name') }}</th>
+                                        <th class="px-3 py-2">{{ __('explorer.table_headers.type') }}</th>
+                                        <th class="px-3 py-2">{{ __('explorer.table_headers.nullable') }}</th>
+                                        <th class="px-3 py-2">{{ __('explorer.table_headers.default') }}</th>
+                                        <th class="px-3 py-2">{{ __('explorer.table_headers.notes') }}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -190,8 +190,8 @@
                                                 <span class="text-xs text-zinc-400 dark:text-zinc-500">{{ $c->type->value }}</span>
                                             </td>
                                             <td class="px-3 py-1.5 text-xs">
-                                                @if ($c->nullable) <span class="text-zinc-400 dark:text-zinc-500">yes</span>
-                                                @else <span class="text-zinc-700 dark:text-zinc-300">no</span> @endif
+                                                @if ($c->nullable) <span class="text-zinc-400 dark:text-zinc-500">{{ __('common.yes') }}</span>
+                                                @else <span class="text-zinc-700 dark:text-zinc-300">{{ __('common.no') }}</span> @endif
                                             </td>
                                             <td class="px-3 py-1.5 text-xs font-mono text-zinc-500 dark:text-zinc-400">
                                                 {{ $c->default === null ? '—' : (string) $c->default }}
@@ -204,7 +204,7 @@
                                                     <span class="inline-block rounded bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5">AI</span>
                                                 @endif
                                                 @if ($c->enumValues)
-                                                    <span class="text-zinc-500 dark:text-zinc-400">enum: {{ implode(', ', $c->enumValues) }}</span>
+                                                    <span class="text-zinc-500 dark:text-zinc-400">{{ __('explorer.enum_prefix') }} {{ implode(', ', $c->enumValues) }}</span>
                                                 @endif
                                             </td>
                                         </tr>
@@ -216,17 +216,17 @@
 
                     {{-- Indexes --}}
                     <section class="mb-8">
-                        <h2 class="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">Indexes ({{ count($detail['indexes']) }})</h2>
+                        <h2 class="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">{{ __('explorer.indexes_section') }} ({{ count($detail['indexes']) }})</h2>
                         @if (count($detail['indexes']) === 0)
-                            <p class="text-sm text-zinc-400 dark:text-zinc-500 italic">No indexes.</p>
+                            <p class="text-sm text-zinc-400 dark:text-zinc-500 italic">{{ __('explorer.no_indexes') }}</p>
                         @else
                             <div class="overflow-x-auto bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md">
                                 <table class="w-full text-sm">
                                     <thead class="text-left text-xs uppercase text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-800">
                                         <tr>
-                                            <th class="px-3 py-2">Name</th>
-                                            <th class="px-3 py-2">Columns</th>
-                                            <th class="px-3 py-2">Type</th>
+                                            <th class="px-3 py-2">{{ __('explorer.table_headers.name') }}</th>
+                                            <th class="px-3 py-2">{{ __('explorer.table_headers.columns') }}</th>
+                                            <th class="px-3 py-2">{{ __('explorer.table_headers.type') }}</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -252,19 +252,19 @@
 
                     {{-- Foreign keys --}}
                     <section class="mb-8">
-                        <h2 class="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">Foreign keys ({{ count($detail['foreignKeys']) }})</h2>
+                        <h2 class="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">{{ __('explorer.foreign_keys_section') }} ({{ count($detail['foreignKeys']) }})</h2>
                         @if (count($detail['foreignKeys']) === 0)
-                            <p class="text-sm text-zinc-400 dark:text-zinc-500 italic">No foreign keys.</p>
+                            <p class="text-sm text-zinc-400 dark:text-zinc-500 italic">{{ __('explorer.no_foreign_keys') }}</p>
                         @else
                             <div class="overflow-x-auto bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md">
                                 <table class="w-full text-sm">
                                     <thead class="text-left text-xs uppercase text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-800">
                                         <tr>
-                                            <th class="px-3 py-2">Name</th>
-                                            <th class="px-3 py-2">Columns</th>
-                                            <th class="px-3 py-2">References</th>
-                                            <th class="px-3 py-2">On update</th>
-                                            <th class="px-3 py-2">On delete</th>
+                                            <th class="px-3 py-2">{{ __('explorer.table_headers.name') }}</th>
+                                            <th class="px-3 py-2">{{ __('explorer.table_headers.columns') }}</th>
+                                            <th class="px-3 py-2">{{ __('explorer.table_headers.references') }}</th>
+                                            <th class="px-3 py-2">{{ __('explorer.table_headers.on_update') }}</th>
+                                            <th class="px-3 py-2">{{ __('explorer.table_headers.on_delete') }}</th>
                                         </tr>
                                     </thead>
                                     <tbody>

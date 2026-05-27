@@ -1,7 +1,7 @@
 <div class="space-y-6">
     <div class="flex items-center justify-between">
-        <h1 class="text-2xl font-semibold">Exports</h1>
-        <span class="text-xs text-zinc-500 dark:text-zinc-400">Files expire after {{ config('tableflip.exports.retention_days', 7) }} days.</span>
+        <h1 class="text-2xl font-semibold">{{ __('exports.title') }}</h1>
+        <span class="text-xs text-zinc-500 dark:text-zinc-400">{{ __('exports.expire_notice', ['days' => config('tableflip.exports.retention_days', 7)]) }}</span>
     </div>
 
     @if (session('export_queued'))
@@ -12,20 +12,20 @@
 
     @if ($exports->isEmpty())
         <div class="rounded-md border border-dashed border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-8 text-center text-sm text-zinc-500 dark:text-zinc-400">
-            No exports yet. Trigger one from the Explorer or the SQL editor.
+            {{ __('exports.empty') }}
         </div>
     @else
         <div class="overflow-x-auto bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg">
             <table class="w-full text-sm">
                 <thead class="text-left text-xs uppercase text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-800">
                     <tr>
-                        <th class="px-4 py-2">File</th>
-                        <th class="px-4 py-2">Format</th>
-                        <th class="px-4 py-2">Source</th>
-                        <th class="px-4 py-2">Status</th>
-                        <th class="px-4 py-2 text-right">Rows / Size</th>
-                        <th class="px-4 py-2">Created</th>
-                        <th class="px-4 py-2 text-right">Actions</th>
+                        <th class="px-4 py-2">{{ __('exports.columns.file') }}</th>
+                        <th class="px-4 py-2">{{ __('exports.columns.format') }}</th>
+                        <th class="px-4 py-2">{{ __('exports.columns.source') }}</th>
+                        <th class="px-4 py-2">{{ __('exports.columns.status') }}</th>
+                        <th class="px-4 py-2 text-right">{{ __('exports.columns.rows_size') }}</th>
+                        <th class="px-4 py-2">{{ __('exports.columns.created') }}</th>
+                        <th class="px-4 py-2 text-right">{{ __('exports.columns.actions') }}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -45,19 +45,19 @@
                             <td class="px-4 py-2">
                                 @if ($export->status === 'completed')
                                     <span class="inline-flex items-center gap-1 text-xs text-emerald-700">
-                                        <span class="size-1.5 rounded-full bg-emerald-500"></span> ready
+                                        <span class="size-1.5 rounded-full bg-emerald-500"></span> {{ __('exports.status.ready') }}
                                     </span>
                                 @elseif ($export->status === 'failed')
                                     <span class="inline-flex items-center gap-1 text-xs text-rose-700" title="{{ $export->error_message }}">
-                                        <span class="size-1.5 rounded-full bg-rose-500"></span> failed
+                                        <span class="size-1.5 rounded-full bg-rose-500"></span> {{ __('exports.status.failed') }}
                                     </span>
                                 @elseif ($export->status === 'running')
                                     <span class="inline-flex items-center gap-1 text-xs text-blue-700">
-                                        <span class="size-1.5 rounded-full bg-blue-500 animate-pulse"></span> running
+                                        <span class="size-1.5 rounded-full bg-blue-500 animate-pulse"></span> {{ __('exports.status.running') }}
                                     </span>
                                 @else
                                     <span class="inline-flex items-center gap-1 text-xs text-zinc-500 dark:text-zinc-400">
-                                        <span class="size-1.5 rounded-full bg-zinc-400"></span> queued
+                                        <span class="size-1.5 rounded-full bg-zinc-400"></span> {{ __('exports.status.queued') }}
                                     </span>
                                 @endif
                             </td>
@@ -72,11 +72,11 @@
                             <td class="px-4 py-2 text-right space-x-2 whitespace-nowrap">
                                 @if ($export->isCompleted() && $export->download_url && ! $export->isExpired())
                                     <a href="{{ $export->download_url }}"
-                                        class="text-xs text-zinc-900 dark:text-zinc-100 hover:underline font-medium">Download</a>
+                                        class="text-xs text-zinc-900 dark:text-zinc-100 hover:underline font-medium">{{ __('exports.download') }}</a>
                                 @endif
                                 <button type="button" wire:click="deleteExport({{ $export->id }})"
-                                    wire:confirm="Delete this export ?"
-                                    class="text-xs text-rose-600 hover:text-rose-700">Delete</button>
+                                    wire:confirm="{{ __('exports.delete_confirm') }}"
+                                    class="text-xs text-rose-600 hover:text-rose-700">{{ __('exports.delete') }}</button>
                             </td>
                         </tr>
                     @endforeach
@@ -88,7 +88,7 @@
 
         <button type="button" wire:click="$refresh"
             class="text-xs text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-zinc-100 underline">
-            Refresh
+            {{ __('exports.refresh') }}
         </button>
     @endif
 </div>

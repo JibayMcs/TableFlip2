@@ -51,12 +51,12 @@ class Profile extends Component
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', Rule::unique('users', 'email')->ignore($user->id)],
             'timezone' => ['required', 'string', 'max:64'],
-            'locale' => ['required', 'string', 'max:10'],
+            'locale' => ['required', 'in:fr,en'],
             'theme' => ['required', 'in:light,dark'],
         ]);
 
         $user->update($data);
-        session()->flash('profile_status', 'Profile updated.');
+        session()->flash('profile_status', __('auth.profile.saved'));
     }
 
     public function changePassword(): void
@@ -71,7 +71,7 @@ class Profile extends Component
         $user->update(['password' => Hash::make($this->newPassword)]);
 
         $this->reset('currentPassword', 'newPassword', 'newPasswordConfirmation');
-        session()->flash('password_status', 'Password updated.');
+        session()->flash('password_status', __('auth.profile.password_changed'));
     }
 
     public function render(): View
