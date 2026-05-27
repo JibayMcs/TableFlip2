@@ -108,7 +108,7 @@ trait HasRowEditing
             return;
         }
 
-        $driver = $current->driver();
+        $driver = $this->effectiveDriver($current);
         if ($driver === null) {
             $this->editError = 'No active connection.';
 
@@ -137,7 +137,7 @@ trait HasRowEditing
 
     public function startInsert(CurrentConnection $current, SchemaIntrospectionService $schema): void
     {
-        $driver = $current->driver();
+        $driver = $this->effectiveDriver($current);
         if ($driver === null) {
             return;
         }
@@ -171,7 +171,7 @@ trait HasRowEditing
             return;
         }
 
-        $driver = $current->driver();
+        $driver = $this->effectiveDriver($current);
         if ($driver === null) {
             $this->editError = 'No active connection.';
 
@@ -266,7 +266,7 @@ trait HasRowEditing
 
     public function deleteRow(array $rowKey, CurrentConnection $current, DeleteRowsAction $action): void
     {
-        $driver = $current->driver();
+        $driver = $this->effectiveDriver($current);
         if ($driver === null) {
             $this->editError = 'No active connection.';
 
@@ -327,7 +327,7 @@ trait HasRowEditing
             return;
         }
 
-        $driver = $current->driver();
+        $driver = $this->effectiveDriver($current);
         if ($driver === null) {
             $this->editError = 'No active connection.';
 

@@ -235,6 +235,23 @@ class TableData extends Component
     private const CELL_DISPLAY_CAP = 240;
 
     /**
+     * Resolve the driver to use for data operations on the current table.
+     * On PostgreSQL this swaps to a connection scoped to the table's DB
+     * (see {@see SchemaIntrospectionService::driverFor}); on other engines
+     * it's a no-op.
+     */
+    protected function effectiveDriver(CurrentConnection $current): ?\App\Domain\Database\Contracts\DatabaseDriverInterface
+    {
+        $raw = $current->driver();
+        if ($raw === null) {
+            return null;
+        }
+
+        return app(\App\Application\Schema\SchemaIntrospectionService::class)
+            ->driverFor($raw, $this->database);
+    }
+
+    /**
      * Cell value asked back from the browser when the user clicks a truncated
      * cell. Returns the full value via a single-row SELECT, scoped by PK.
      *
@@ -242,7 +259,7 @@ class TableData extends Component
      */
     public function loadCellValue(array $rowKey, string $column, CurrentConnection $current): ?string
     {
-        $driver = $current->driver();
+        $driver = $this->effectiveDriver($current);
         if ($driver === null || $rowKey === []) {
             return null;
         }
@@ -366,12 +383,15 @@ class TableData extends Component
         TableDataQueryService $service,
         SchemaIntrospectionService $schema,
     ): View {
-        $driver = $current->driver();
-        if ($driver === null) {
+        $rawDriver = $current->driver();
+        if ($rawDriver === null) {
             return view('livewire.explorer.table-data', $this->emptyView('No active connection.'));
         }
 
         $tableId = $this->currentTableIdentifier();
+        // PG one-connection-per-DB constraint : swap to a driver scoped to the
+        // table's database when needed. No-op for MySQL/MariaDB/MSSQL.
+        $driver = $schema->driverFor($rawDriver, $tableId->database);
 
         // Resolve column metadata (types, PK flags). Used by the editing trait
         // for inline inputs and by the validator for hybrid type checks.

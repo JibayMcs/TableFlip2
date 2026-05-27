@@ -108,12 +108,14 @@ class SchemaIntrospectionService
 
     /**
      * COUNT(*) on the given table. Not memoised — callers decide when to
-     * pay this cost (it can be slow on large tables).
+     * pay this cost (it can be slow on large tables). Routes through the
+     * per-database pool so PG counts hit the right connection.
      */
     public function rowCount(DatabaseDriverInterface $driver, TableIdentifier $table): int
     {
-        $sql = 'SELECT COUNT(*) AS c FROM '.$driver->qualify($table);
-        $result = $driver->select($sql);
+        $effective = $this->driverFor($driver, $table->database);
+        $sql = 'SELECT COUNT(*) AS c FROM '.$effective->qualify($table);
+        $result = $effective->select($sql);
         $rows = is_array($result->rows) ? $result->rows : iterator_to_array($result->rows);
 
         return (int) ($rows[0]['c'] ?? 0);
@@ -125,8 +127,11 @@ class SchemaIntrospectionService
      * existing connection — we just return the original driver. For
      * PostgreSQL (where one connection = one DB) we spin up — and cache for
      * the rest of the request — a secondary driver scoped to that DB.
+     *
+     * Public so non-introspection callers (TableDataQueryService, SqlExecutor)
+     * can route their data queries through the same per-DB pool.
      */
-    private function driverFor(DatabaseDriverInterface $driver, ?string $database): DatabaseDriverInterface
+    public function driverFor(DatabaseDriverInterface $driver, ?string $database): DatabaseDriverInterface
     {
         if ($database === null || $database === '') {
             return $driver;

@@ -69,7 +69,7 @@ trait HasSqlScratchPad
             return;
         }
 
-        $driver = $current->driver();
+        $driver = $this->effectiveDriver($current);
         if ($driver === null) {
             $this->customSqlError = 'No active connection.';
 
@@ -98,7 +98,7 @@ trait HasSqlScratchPad
         $sql = (string) $this->pendingSqlDestructive['sql'];
         $this->pendingSqlDestructive = null;
 
-        $driver = $current->driver();
+        $driver = $this->effectiveDriver($current);
         if ($driver === null) {
             $this->customSqlError = 'No active connection.';
 

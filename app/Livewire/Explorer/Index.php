@@ -37,6 +37,8 @@ class Index extends Component
 
     public bool $rowCountFailed = false;
 
+    public ?string $rowCountError = null;
+
     public function mount(CurrentConnection $current): void
     {
         if ($current->driver() === null) {
@@ -126,9 +128,11 @@ class Index extends Component
         try {
             $this->rowCount = $schema->rowCount($driver, $table);
             $this->rowCountFailed = false;
-        } catch (Throwable) {
+            $this->rowCountError = null;
+        } catch (Throwable $e) {
             $this->rowCount = null;
             $this->rowCountFailed = true;
+            $this->rowCountError = $e->getMessage();
         }
     }
 

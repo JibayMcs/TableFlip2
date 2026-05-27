@@ -156,7 +156,8 @@
                         @if ($rowCount !== null)
                             <span class="font-mono font-medium">{{ number_format($rowCount) }}</span>
                         @elseif ($rowCountFailed)
-                            <span class="text-xs text-rose-600">unable to count</span>
+                            <span class="text-xs text-rose-600"
+                                @if ($rowCountError) x-tooltip.bottom="{{ $rowCountError }}" @endif>unable to count</span>
                         @else
                             <button wire:click="loadRowCount" wire:loading.attr="disabled" wire:target="loadRowCount"
                                 class="text-xs text-zinc-700 underline hover:text-zinc-900">
