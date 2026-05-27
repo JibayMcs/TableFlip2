@@ -1,22 +1,112 @@
 <div class="space-y-4">
+    {{-- SQL scratch pad : drives the table below when set --}}
+    @php
+        $sqlEditorConfig = json_encode([
+            'dialect' => $dialect,
+            'schema' => $autocompleteSchema,
+            'initialContent' => $customSql !== '' ? $customSql : $this->scratchPadSeedSql(),
+            'defaultTable' => $table,
+            'changeEvent' => 'table-data-sql-change',
+            'executeEvent' => 'table-data-sql-execute',
+        ]);
+    @endphp
+    <div class="border border-zinc-200 rounded-md bg-white overflow-hidden">
+        <button type="button" wire:click="toggleSqlPad"
+            class="w-full px-3 py-2 flex items-center gap-2 text-xs text-zinc-600 hover:bg-zinc-50">
+            <svg class="size-3 text-zinc-400 transition-transform {{ $sqlPadOpen ? 'rotate-90' : '' }}"
+                fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+            </svg>
+            <span class="font-medium text-zinc-700">SQL</span>
+            @if ($mode === 'custom')
+                <span class="text-emerald-700 text-[10px] bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5 font-semibold">ACTIVE</span>
+            @endif
+            @if ($customSqlMeta)
+                <span class="ml-auto text-[10px] font-mono text-zinc-400">last: {{ number_format($customSqlMeta['durationMs'], 1) }}ms</span>
+            @endif
+        </button>
+
+        @if ($sqlPadOpen)
+            <div class="border-t border-zinc-200">
+                <div class="flex gap-px items-stretch bg-zinc-200">
+                    <div class="flex-1 min-w-0 h-40 bg-white"
+                        @table-data-sql-change="$wire.set('customSql', $event.detail.sql, false)"
+                        @table-data-sql-execute="$wire.executeCustomSql($event.detail.sql)">
+                        <div x-sql-editor='{!! $sqlEditorConfig !!}' wire:ignore class="h-full"></div>
+                    </div>
+                    <div class="shrink-0 flex flex-col items-center gap-1 p-2 bg-zinc-50">
+                        <button type="button" wire:click="executeCustomSql(null)"
+                            wire:loading.attr="disabled" wire:target="executeCustomSql"
+                            x-tooltip.left="Run query (⌘/Ctrl+↵)"
+                            class="size-9 inline-flex items-center justify-center rounded-md bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50 transition-colors">
+                            <svg wire:loading.remove wire:target="executeCustomSql" class="size-4" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M8 5v14l11-7z"/>
+                            </svg>
+                            <svg wire:loading wire:target="executeCustomSql" class="size-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" stroke-opacity="0.25"/>
+                                <path d="M21 12a9 9 0 00-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+                            </svg>
+                        </button>
+                        @if ($mode === 'custom')
+                            <button type="button" wire:click="clearCustomSql"
+                                x-tooltip.left="Reset to filtered view"
+                                class="size-9 inline-flex items-center justify-center rounded-md border border-zinc-300 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 transition-colors">
+                                <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="1 4 1 10 7 10"/>
+                                    <path d="M3.51 15a9 9 0 102.13-9.36L1 10"/>
+                                </svg>
+                            </button>
+                        @endif
+                    </div>
+                </div>
+
+                @if ($customSqlError)
+                    <div class="border-t border-zinc-200 m-2 p-2 bg-rose-50 border-rose-200 border rounded text-xs text-rose-800 font-mono whitespace-pre-wrap">
+                        {{ $customSqlError }}
+                    </div>
+                @endif
+
+                @if ($customSqlMeta && $customSqlMeta['isWrite'])
+                    <div class="border-t border-zinc-200 m-2 p-2 bg-emerald-50 border border-emerald-200 rounded text-xs text-emerald-800">
+                        Affected rows : <span class="font-mono font-medium">{{ number_format($customSqlMeta['affectedRows']) }}</span>
+                        <span class="text-emerald-600 ml-2">({{ number_format($customSqlMeta['durationMs'], 1) }} ms)</span>
+                    </div>
+                @endif
+            </div>
+        @endif
+    </div>
+
+    {{-- Custom mode banner --}}
+    @if ($mode === 'custom')
+        <div class="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 flex items-center gap-2">
+            <span class="font-medium">Custom SQL mode</span>
+            <span class="text-emerald-700">— the table below reflects your query's result. Filters & pagination are paused.</span>
+            <button type="button" wire:click="clearCustomSql" class="ml-auto underline hover:text-emerald-900">Back to filtered view</button>
+        </div>
+    @endif
+
     {{-- Toolbar --}}
     <div class="flex items-center justify-between gap-3 flex-wrap">
         <div class="flex items-center gap-2 flex-wrap">
-            <button type="button" wire:click="toggleFilters"
-                class="text-xs px-2.5 py-1.5 rounded border border-zinc-300 hover:bg-zinc-50 {{ $showFilters ? 'bg-zinc-100 border-zinc-400' : '' }}">
-                Filters {{ count($filters) > 0 ? '('.count($filters).')' : '' }}
-            </button>
-            @if (count($filters) > 0)
-                <button type="button" wire:click="clearFilters"
-                    class="text-xs text-zinc-500 hover:text-zinc-700 underline">Clear all</button>
-            @endif
-            @if (count($sort) > 0)
-                <button type="button" wire:click="$set('sort', [])"
-                    class="text-xs text-zinc-500 hover:text-zinc-700 underline">Reset sort</button>
+            @if ($mode === 'natural')
+                <button type="button" wire:click="toggleFilters"
+                    class="text-xs px-2.5 py-1.5 rounded border border-zinc-300 hover:bg-zinc-50 {{ $showFilters ? 'bg-zinc-100 border-zinc-400' : '' }}">
+                    Filters {{ count($filters) > 0 ? '('.count($filters).')' : '' }}
+                </button>
+                @if (count($filters) > 0)
+                    <button type="button" wire:click="clearFilters"
+                        class="text-xs text-zinc-500 hover:text-zinc-700 underline">Clear all</button>
+                @endif
+                @if (count($sort) > 0)
+                    <button type="button" wire:click="$set('sort', [])"
+                        class="text-xs text-zinc-500 hover:text-zinc-700 underline">Reset sort</button>
+                @endif
             @endif
 
             @if (! $error)
-                <span class="mx-1 h-4 w-px bg-zinc-200"></span>
+                @if ($mode === 'natural')
+                    <span class="mx-1 h-4 w-px bg-zinc-200"></span>
+                @endif
                 <button type="button" wire:click="startInsert"
                     class="text-xs px-2.5 py-1.5 rounded bg-zinc-900 text-white hover:bg-zinc-800">
                     + Insert row
@@ -34,14 +124,16 @@
         </div>
         <div class="flex items-center gap-3 text-xs text-zinc-500">
             <span><span class="font-mono font-medium text-zinc-700">{{ number_format($total) }}</span> rows</span>
-            <label class="flex items-center gap-1">
-                Per page
-                <select wire:model.live="perPage" class="text-xs border border-zinc-300 rounded px-1.5 py-1">
-                    @foreach ([25, 50, 100, 250] as $size)
-                        <option value="{{ $size }}">{{ $size }}</option>
-                    @endforeach
-                </select>
-            </label>
+            @if ($mode === 'natural')
+                <label class="flex items-center gap-1">
+                    Per page
+                    <select wire:model.live="perPage" class="text-xs border border-zinc-300 rounded px-1.5 py-1">
+                        @foreach ([25, 50, 100, 250] as $size)
+                            <option value="{{ $size }}">{{ $size }}</option>
+                        @endforeach
+                    </select>
+                </label>
+            @endif
         </div>
     </div>
 
@@ -67,7 +159,7 @@
     @endif
 
     {{-- Filter builder --}}
-    @if ($showFilters)
+    @if ($mode === 'natural' && $showFilters)
         <div class="bg-white border border-zinc-200 rounded-md p-3">
             <div class="space-y-2">
                 @foreach ($filters as $i => $f)
@@ -243,23 +335,59 @@
             </table>
         </div>
 
-        {{-- Pagination --}}
-        <div class="flex items-center justify-between text-sm">
-            <span class="text-zinc-500">
-                Page <span class="font-medium text-zinc-700">{{ $page }}</span>
-                of <span class="font-medium text-zinc-700">{{ number_format($totalPages) }}</span>
-            </span>
-            <div class="flex gap-1">
-                <button wire:click="setPage(1)" @disabled($page <= 1) class="px-2 py-1 rounded border border-zinc-300 disabled:opacity-30 hover:bg-zinc-50">‹‹</button>
-                <button wire:click="setPage({{ $page - 1 }})" @disabled($page <= 1) class="px-2 py-1 rounded border border-zinc-300 disabled:opacity-30 hover:bg-zinc-50">‹</button>
-                <button wire:click="setPage({{ $page + 1 }})" @disabled($page >= $totalPages) class="px-2 py-1 rounded border border-zinc-300 disabled:opacity-30 hover:bg-zinc-50">›</button>
-                <button wire:click="setPage({{ $totalPages }})" @disabled($page >= $totalPages) class="px-2 py-1 rounded border border-zinc-300 disabled:opacity-30 hover:bg-zinc-50">››</button>
+        @if ($mode === 'natural')
+            {{-- Pagination --}}
+            <div class="flex items-center justify-between text-sm">
+                <span class="text-zinc-500">
+                    Page <span class="font-medium text-zinc-700">{{ $page }}</span>
+                    of <span class="font-medium text-zinc-700">{{ number_format($totalPages) }}</span>
+                </span>
+                <div class="flex gap-1">
+                    <button wire:click="setPage(1)" @disabled($page <= 1) class="px-2 py-1 rounded border border-zinc-300 disabled:opacity-30 hover:bg-zinc-50">‹‹</button>
+                    <button wire:click="setPage({{ $page - 1 }})" @disabled($page <= 1) class="px-2 py-1 rounded border border-zinc-300 disabled:opacity-30 hover:bg-zinc-50">‹</button>
+                    <button wire:click="setPage({{ $page + 1 }})" @disabled($page >= $totalPages) class="px-2 py-1 rounded border border-zinc-300 disabled:opacity-30 hover:bg-zinc-50">›</button>
+                    <button wire:click="setPage({{ $totalPages }})" @disabled($page >= $totalPages) class="px-2 py-1 rounded border border-zinc-300 disabled:opacity-30 hover:bg-zinc-50">››</button>
+                </div>
             </div>
-        </div>
+        @endif
 
         <p class="text-xs text-zinc-400">
             Tip: click a cell to edit, Enter to save, Esc to cancel. Click a column header to sort, shift-click for multi-sort.
         </p>
+    @endif
+
+    {{-- Destructive SQL confirmation modal (custom scratch pad) --}}
+    @if ($pendingSqlDestructive)
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/50 p-4"
+            wire:click.self="cancelCustomDestructive">
+            <div x-data="{ confirmText: '' }" class="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 space-y-4">
+                <h2 class="text-lg font-semibold text-zinc-900">Destructive query detected</h2>
+                <div class="rounded-md bg-amber-50 border border-amber-200 p-3 text-sm text-amber-900">
+                    {{ $pendingSqlDestructive['reason'] }}
+                </div>
+                <details class="text-xs">
+                    <summary class="cursor-pointer text-zinc-500 hover:text-zinc-700">Show SQL</summary>
+                    <pre class="mt-2 rounded bg-zinc-900 text-zinc-100 p-3 overflow-x-auto whitespace-pre-wrap break-all">{{ $pendingSqlDestructive['sql'] }}</pre>
+                </details>
+                <div>
+                    <label class="block text-sm text-zinc-700 mb-1">
+                        Type <code class="bg-zinc-100 px-1 rounded font-mono">CONFIRM</code> to proceed:
+                    </label>
+                    <input type="text" x-model="confirmText" autofocus
+                        class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm font-mono" />
+                </div>
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" wire:click="cancelCustomDestructive"
+                        class="px-3 py-2 text-sm text-zinc-600 hover:text-zinc-900">Cancel</button>
+                    <button type="button" wire:click="confirmCustomDestructive"
+                        :disabled="confirmText !== 'CONFIRM'"
+                        :class="confirmText === 'CONFIRM' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-zinc-300 cursor-not-allowed'"
+                        class="rounded-md px-4 py-2 text-sm font-medium text-white">
+                        Run anyway
+                    </button>
+                </div>
+            </div>
+        </div>
     @endif
 
     {{-- Bulk delete confirmation modal --}}

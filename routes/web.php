@@ -6,6 +6,7 @@ use App\Livewire\Auth\Profile;
 use App\Livewire\Connections\Form as ConnectionForm;
 use App\Livewire\Connections\Index as ConnectionsIndex;
 use App\Livewire\Explorer\Index as ExplorerIndex;
+use App\Livewire\Sql\Editor as SqlEditor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
@@ -27,6 +28,7 @@ Route::post('/logout', function (Request $request) {
 Route::middleware('auth.tableflip')->group(function () {
     Route::view('/', 'home')->name('home');
     Route::get('/explorer', ExplorerIndex::class)->name('explorer');
+    Route::get('/sql', SqlEditor::class)->name('sql');
 });
 
 Route::middleware('auth:web')->group(function () {

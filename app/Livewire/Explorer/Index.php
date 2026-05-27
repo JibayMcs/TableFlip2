@@ -172,6 +172,7 @@ class Index extends Component
             'tablesByDb' => $tablesByDb,
             'viewsByDb' => $viewsByDb,
             'detail' => $detail,
+            'dialect' => $driver?->getDriverName() ?? 'mysql',
         ]);
     }
 

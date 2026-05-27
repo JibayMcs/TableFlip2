@@ -13,6 +13,7 @@ use App\Domain\Database\Query\Sort;
 use App\Domain\Database\Query\SortDirection;
 use App\Domain\Database\ValueObjects\TableIdentifier;
 use App\Livewire\Explorer\Concerns\HasRowEditing;
+use App\Livewire\Explorer\Concerns\HasSqlScratchPad;
 use Illuminate\Contracts\View\View;
 use Livewire\Attributes\On;
 use Livewire\Attributes\Url;
@@ -22,6 +23,7 @@ use Throwable;
 class TableData extends Component
 {
     use HasRowEditing;
+    use HasSqlScratchPad;
 
     public string $database = '';
 
@@ -155,6 +157,42 @@ class TableData extends Component
 
         $tableId = $this->currentTableIdentifier();
 
+        // Resolve column metadata (types, PK flags). Used by the editing trait
+        // for inline inputs and by the validator for hybrid type checks.
+        try {
+            $detail = $schema->tableDetail($driver, $tableId);
+            $columnDefs = collect($detail['columns'])->keyBy('name')->all();
+            $pkColumns = $this->pkColumnNames($detail['columns']);
+        } catch (Throwable $e) {
+            return view('livewire.explorer.table-data', $this->emptyView($e->getMessage()));
+        }
+
+        $autocompleteSchema = [
+            $this->table => array_keys($columnDefs),
+        ];
+        $dialectName = $driver->getDriverName();
+
+        // ── Custom SQL scratch pad takes priority over the natural query ──
+        // Rows were captured at execution time (see HasSqlScratchPad::applySqlResult)
+        // so render is purely a display step — no re-execution, no risk of
+        // re-triggering destructive guards or doubling history entries.
+        if ($this->customSql !== '') {
+            return view('livewire.explorer.table-data', [
+                'error' => null,
+                'mode' => 'custom',
+                'rows' => $this->customRows,
+                'columns' => $this->customColumns,
+                'columnDefs' => $columnDefs,
+                'pkColumns' => $pkColumns,
+                'hasPrimaryKey' => $pkColumns !== [],
+                'total' => count($this->customRows),
+                'totalPages' => 1,
+                'autocompleteSchema' => $autocompleteSchema,
+                'dialect' => $dialectName,
+            ]);
+        }
+
+        // ── Natural mode : filters + sort + pagination ──
         $filters = array_values(array_filter(array_map(
             function (array $f) {
                 if ($f['column'] === '') {
@@ -174,23 +212,13 @@ class TableData extends Component
             $this->filters,
         ), static fn ($f) => $f !== null));
 
-        $sort = array_map(
+        $sortRules = array_map(
             fn (array $s) => new Sort($s['column'], SortDirection::from($s['direction'])),
             $this->sort,
         );
 
-        // Resolve column metadata (types, PK flags). Used by the editing trait
-        // for inline inputs and by the validator for hybrid type checks.
         try {
-            $detail = $schema->tableDetail($driver, $tableId);
-            $columnDefs = collect($detail['columns'])->keyBy('name')->all();
-            $pkColumns = $this->pkColumnNames($detail['columns']);
-        } catch (Throwable $e) {
-            return view('livewire.explorer.table-data', $this->emptyView($e->getMessage()));
-        }
-
-        try {
-            $result = $service->query($driver, $tableId, $filters, $sort, $this->page, $this->perPage);
+            $result = $service->query($driver, $tableId, $filters, $sortRules, $this->page, $this->perPage);
         } catch (Throwable $e) {
             return view('livewire.explorer.table-data', $this->emptyView($e->getMessage()));
         }
@@ -199,6 +227,7 @@ class TableData extends Component
 
         return view('livewire.explorer.table-data', [
             'error' => null,
+            'mode' => 'natural',
             'rows' => $result['rows'],
             'columns' => $result['columns'],
             'columnDefs' => $columnDefs,
@@ -206,6 +235,8 @@ class TableData extends Component
             'hasPrimaryKey' => $pkColumns !== [],
             'total' => $result['total'],
             'totalPages' => $totalPages,
+            'autocompleteSchema' => $autocompleteSchema,
+            'dialect' => $dialectName,
         ]);
     }
 
@@ -216,6 +247,7 @@ class TableData extends Component
     {
         return [
             'error' => $error,
+            'mode' => 'natural',
             'rows' => [],
             'columns' => [],
             'columnDefs' => [],
@@ -223,6 +255,8 @@ class TableData extends Component
             'hasPrimaryKey' => false,
             'total' => 0,
             'totalPages' => 1,
+            'autocompleteSchema' => [],
+            'dialect' => 'mysql',
         ];
     }
 

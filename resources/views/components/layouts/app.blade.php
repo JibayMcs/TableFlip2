@@ -28,6 +28,7 @@
                         @auth('web')
                             @if (session('tableflip.active_connection_id'))
                                 <a href="{{ route('explorer') }}" wire:navigate class="hover:text-zinc-900 data-current:text-zinc-900 data-current:font-medium">Explorer</a>
+                                <a href="{{ route('sql') }}" wire:navigate class="hover:text-zinc-900 data-current:text-zinc-900 data-current:font-medium">SQL</a>
                             @endif
 
                             <livewire:navbar.connection-switcher />
@@ -44,6 +45,7 @@
                             </form>
                         @elseauth('db_session')
                             <a href="{{ route('explorer') }}" wire:navigate class="hover:text-zinc-900 data-current:text-zinc-900 data-current:font-medium">Explorer</a>
+                            <a href="{{ route('sql') }}" wire:navigate class="hover:text-zinc-900 data-current:text-zinc-900 data-current:font-medium">SQL</a>
                             <span class="text-zinc-500 font-mono text-xs">
                                 {{ auth('db_session')->user()->label() }}
                             </span>
