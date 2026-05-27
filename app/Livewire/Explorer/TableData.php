@@ -12,6 +12,8 @@ use App\Domain\Database\Query\Sort;
 use App\Domain\Database\Query\SortDirection;
 use App\Domain\Database\ValueObjects\TableIdentifier;
 use Illuminate\Contracts\View\View;
+use Livewire\Attributes\On;
+use Livewire\Attributes\Url;
 use Livewire\Component;
 use Throwable;
 
@@ -23,14 +25,18 @@ class TableData extends Component
 
     public string $table = '';
 
+    #[Url(as: 'p', except: 1)]
     public int $page = 1;
 
+    #[Url(as: 'pp', except: 50)]
     public int $perPage = 50;
 
     /** @var list<array{column: string, operator: string, value: ?string}> */
+    #[Url(as: 'f', except: [])]
     public array $filters = [];
 
     /** @var list<array{column: string, direction: string}> */
+    #[Url(as: 's', except: [])]
     public array $sort = [];
 
     public bool $showFilters = false;
@@ -40,6 +46,25 @@ class TableData extends Component
         $this->database = $database;
         $this->table = $table;
         $this->schema = $schema;
+
+        // Auto-show the filter builder when arriving via a deeplink that
+        // already carries filters.
+        if ($this->filters !== []) {
+            $this->showFilters = true;
+        }
+    }
+
+    /**
+     * Triggered by Explorer/Index when the user picks a different table in the
+     * sidebar. This component is about to be destroyed (key change), but we
+     * clear the URL params first so the new instance starts with a clean slate.
+     */
+    #[On('explorer-table-changed')]
+    public function clearOnTableChange(): void
+    {
+        $this->filters = [];
+        $this->sort = [];
+        $this->page = 1;
     }
 
     public function toggleFilters(): void

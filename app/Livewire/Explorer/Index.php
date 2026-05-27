@@ -96,9 +96,12 @@ class Index extends Component
         }
 
         // When picking a different table, snap back to the schema tab so the
-        // user gets oriented before pulling potentially-heavy data.
+        // user gets oriented before pulling potentially-heavy data, and tell
+        // any live TableData child to drop its filters/sort/page from the URL
+        // before it gets re-mounted with the new table.
         if ($changed) {
             $this->tab = 'schema';
+            $this->dispatch('explorer-table-changed');
         }
     }
 
