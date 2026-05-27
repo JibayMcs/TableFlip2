@@ -8,6 +8,11 @@ return [
         'breeze_enabled' => (bool) env('AUTH_BREEZE_ENABLED', true),
         'direct_db_enabled' => (bool) env('AUTH_DIRECT_DB_ENABLED', true),
         'registration_enabled' => (bool) env('AUTH_REGISTRATION_ENABLED', false),
+
+        // When false (default), the direct-DB login lets you authenticate
+        // against a server WITHOUT picking a database — PMA-style. Switch
+        // to true to force users to provide a database at login.
+        'require_db_name' => (bool) env('TABLEFLIP_REQUIRE_DB_NAME', false),
     ],
 
     /*

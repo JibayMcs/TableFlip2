@@ -53,8 +53,12 @@ final class DirectDbUser implements Authenticatable
     {
         $cfg = $this->config;
 
-        return $cfg->driver === 'sqlite'
-            ? "sqlite:{$cfg->database}"
-            : "{$cfg->username}@{$cfg->host}:{$cfg->port}/{$cfg->database}";
+        if ($cfg->driver === 'sqlite') {
+            return "sqlite:{$cfg->database}";
+        }
+
+        $base = "{$cfg->username}@{$cfg->host}:{$cfg->port}";
+
+        return $cfg->hasDatabase() ? "{$base}/{$cfg->database}" : $base;
     }
 }

@@ -55,6 +55,9 @@ class Login extends Component
 
     public bool $databaseLocked = false;
 
+    /** True when the user MUST provide a database (locked by policy, env, or SQLite). */
+    public bool $databaseRequired = false;
+
     public function mount(): void
     {
         $this->breezeEnabled = (bool) config('tableflip.auth.breeze_enabled');
@@ -104,6 +107,22 @@ class Login extends Component
         if (! $this->directEnabled) {
             $this->mode = 'account';
         }
+
+        $this->refreshDatabaseRequirement();
+    }
+
+    public function updatedDriver(): void
+    {
+        $this->refreshDatabaseRequirement();
+    }
+
+    private function refreshDatabaseRequirement(): void
+    {
+        $policy = AllowedConnectionPolicy::fromConfig();
+
+        $this->databaseRequired = $policy->allowedDatabases !== []
+            || $this->driver === 'sqlite'
+            || (bool) config('tableflip.auth.require_db_name');
     }
 
     public function loginAccount(): void
@@ -139,7 +158,7 @@ class Login extends Component
 
         $rules = [
             'driver' => ['required', 'in:'.implode(',', $this->driverChoices)],
-            'database' => ['required', 'string'],
+            'database' => [$this->databaseRequired ? 'required' : 'nullable', 'string'],
         ];
 
         if ($this->driver !== 'sqlite') {

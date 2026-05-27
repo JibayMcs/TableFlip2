@@ -7,6 +7,18 @@ namespace App\Domain\Database\ValueObjects;
 final readonly class ConnectionConfig
 {
     /**
+     * Driver-specific admin/default databases. We need a non-empty database
+     * to feed Laravel's connectors when the user logged in "server-only"
+     * (no database selected). Listing databases still works fine from these.
+     */
+    private const ADMIN_DATABASE = [
+        'mysql' => 'information_schema',
+        'mariadb' => 'information_schema',
+        'pgsql' => 'postgres',
+        'sqlsrv' => 'master',
+    ];
+
+    /**
      * @param  array<string, mixed>  $options  driver-specific PDO options
      * @param  array<string, mixed>  $sslOptions
      */
@@ -23,6 +35,11 @@ final readonly class ConnectionConfig
         public array $sslOptions = [],
     ) {}
 
+    public function hasDatabase(): bool
+    {
+        return $this->database !== '';
+    }
+
     /**
      * Convert this value object to the array shape expected by Laravel's
      * `config('database.connections.<name>')` slot.
@@ -31,10 +48,12 @@ final readonly class ConnectionConfig
      */
     public function toLaravelConfig(): array
     {
+        $database = $this->resolveDatabase();
+
         return match ($this->driver) {
             'sqlite' => [
                 'driver' => 'sqlite',
-                'database' => $this->database,
+                'database' => $database,
                 'prefix' => '',
                 'foreign_key_constraints' => true,
             ],
@@ -42,7 +61,7 @@ final readonly class ConnectionConfig
                 'driver' => 'pgsql',
                 'host' => $this->host,
                 'port' => $this->port ?: 5432,
-                'database' => $this->database,
+                'database' => $database,
                 'username' => $this->username,
                 'password' => $this->password,
                 'charset' => $this->charset,
@@ -54,7 +73,7 @@ final readonly class ConnectionConfig
                 'driver' => 'sqlsrv',
                 'host' => $this->host,
                 'port' => $this->port ?: 1433,
-                'database' => $this->database,
+                'database' => $database,
                 'username' => $this->username,
                 'password' => $this->password,
                 'charset' => 'utf8',
@@ -67,7 +86,7 @@ final readonly class ConnectionConfig
                 'driver' => $this->driver,
                 'host' => $this->host,
                 'port' => $this->port ?: 3306,
-                'database' => $this->database,
+                'database' => $database,
                 'username' => $this->username,
                 'password' => $this->password,
                 'charset' => $this->charset,
@@ -83,5 +102,20 @@ final readonly class ConnectionConfig
     {
         return $this->driver === 'sqlsrv'
             && str_contains(strtolower($this->host), '.database.windows.net');
+    }
+
+    /**
+     * Resolve which database to actually connect to. Falls back to the
+     * driver's admin/default database when the user did not pick one — this
+     * keeps the PDO connection valid while still letting `listDatabases()`
+     * enumerate everything the user can see.
+     */
+    private function resolveDatabase(): string
+    {
+        if ($this->database !== '') {
+            return $this->database;
+        }
+
+        return self::ADMIN_DATABASE[$this->driver] ?? '';
     }
 }

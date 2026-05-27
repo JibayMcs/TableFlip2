@@ -116,14 +116,19 @@
 
                         <div class="col-span-2">
                             <label for="database" class="block text-sm font-medium text-zinc-700 mb-1">
-                                {{ $driver === 'sqlite' ? 'SQLite file path' : 'Database' }}
+                                @if ($driver === 'sqlite')
+                                    SQLite file path
+                                @else
+                                    Database {{ $databaseRequired ? '' : '(optional)' }}
+                                @endif
                             </label>
                             <input
                                 id="database"
                                 type="text"
                                 wire:model="database"
                                 @disabled($databaseLocked)
-                                required
+                                @if ($databaseRequired) required @endif
+                                placeholder="{{ $driver !== 'sqlite' && ! $databaseRequired ? 'leave empty to list all databases' : '' }}"
                                 class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 {{ $databaseLocked ? 'bg-zinc-50 text-zinc-500' : '' }}"
                             />
                             @error('database') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
