@@ -57,6 +57,22 @@ interface DatabaseDriverInterface
      */
     public function getForeignKeys(TableIdentifier $table): array;
 
+    /**
+     * Fetch all columns of a database in one query (avoids N+1 on large
+     * catalogs). The default impl loops over {@see getColumns}; drivers
+     * override with a single INFORMATION_SCHEMA query.
+     *
+     * @return array<string, list<ColumnDefinition>>  key = strtolower("schema.table")
+     */
+    public function bulkColumns(string $database, ?string $schema = null): array;
+
+    /**
+     * Same idea for foreign keys.
+     *
+     * @return array<string, list<ForeignKeyDefinition>>  key = strtolower("schema.table")
+     */
+    public function bulkForeignKeys(string $database, ?string $schema = null): array;
+
     public function quoteIdentifier(string $identifier): string;
 
     public function qualify(TableIdentifier $table): string;

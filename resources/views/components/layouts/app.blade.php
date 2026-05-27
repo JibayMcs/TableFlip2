@@ -29,6 +29,7 @@
                             @if (session('tableflip.active_connection_id'))
                                 <a href="{{ route('explorer') }}" wire:navigate class="hover:text-zinc-900 data-current:text-zinc-900 data-current:font-medium">Explorer</a>
                                 <a href="{{ route('sql') }}" wire:navigate class="hover:text-zinc-900 data-current:text-zinc-900 data-current:font-medium">SQL</a>
+                                <a href="{{ route('visualizer') }}" wire:navigate class="hover:text-zinc-900 data-current:text-zinc-900 data-current:font-medium">Diagram</a>
                             @endif
 
                             <a href="{{ route('exports.index') }}" wire:navigate class="hover:text-zinc-900 data-current:text-zinc-900 data-current:font-medium">Exports</a>
@@ -48,6 +49,7 @@
                         @elseauth('db_session')
                             <a href="{{ route('explorer') }}" wire:navigate class="hover:text-zinc-900 data-current:text-zinc-900 data-current:font-medium">Explorer</a>
                             <a href="{{ route('sql') }}" wire:navigate class="hover:text-zinc-900 data-current:text-zinc-900 data-current:font-medium">SQL</a>
+                            <a href="{{ route('visualizer') }}" wire:navigate class="hover:text-zinc-900 data-current:text-zinc-900 data-current:font-medium">Diagram</a>
                             <span class="text-zinc-500 font-mono text-xs">
                                 {{ auth('db_session')->user()->label() }}
                             </span>

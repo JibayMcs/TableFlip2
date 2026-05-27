@@ -8,6 +8,7 @@ use App\Livewire\Connections\Index as ConnectionsIndex;
 use App\Livewire\Explorer\Index as ExplorerIndex;
 use App\Livewire\Exports\Index as ExportsIndex;
 use App\Livewire\Sql\Editor as SqlEditor;
+use App\Livewire\Visualizer\Index as VisualizerIndex;
 use App\Models\Export;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Http\Request;
@@ -32,6 +33,7 @@ Route::middleware('auth.tableflip')->group(function () {
     Route::view('/', 'home')->name('home');
     Route::get('/explorer', ExplorerIndex::class)->name('explorer');
     Route::get('/sql', SqlEditor::class)->name('sql');
+    Route::get('/visualizer', VisualizerIndex::class)->name('visualizer');
 });
 
 Route::middleware('auth:web')->group(function () {

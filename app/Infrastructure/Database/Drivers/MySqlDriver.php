@@ -190,6 +190,94 @@ class MySqlDriver extends AbstractDatabaseDriver
     }
 
     /**
+     * Bulk columns of a whole DB in 1 query (vs N for getColumns loop).
+     * Used by the ERD visualizer to avoid timeouts on large schemas.
+     */
+    public function bulkColumns(string $database, ?string $schema = null): array
+    {
+        $rows = $this->fetch(
+            'SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, DATA_TYPE, IS_NULLABLE,
+                    COLUMN_DEFAULT, COLUMN_KEY, EXTRA, CHARACTER_MAXIMUM_LENGTH,
+                    NUMERIC_PRECISION, NUMERIC_SCALE, COLUMN_COMMENT
+             FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = ?
+             ORDER BY TABLE_NAME, ORDINAL_POSITION',
+            [$database],
+        );
+
+        $out = [];
+        foreach ($rows as $r) {
+            $key = strtolower('.'.$r['TABLE_NAME']);
+            $rawType = (string) $r['DATA_TYPE'];
+            $columnType = (string) $r['COLUMN_TYPE'];
+
+            $out[$key][] = new ColumnDefinition(
+                name: (string) $r['COLUMN_NAME'],
+                rawType: $columnType,
+                type: $this->normalizeType($rawType, $columnType),
+                nullable: strtoupper((string) $r['IS_NULLABLE']) === 'YES',
+                default: $this->normalizeDefault($r['COLUMN_DEFAULT'] ?? null),
+                autoIncrement: str_contains(strtolower((string) $r['EXTRA']), 'auto_increment'),
+                isPrimaryKey: strtoupper((string) ($r['COLUMN_KEY'] ?? '')) === 'PRI',
+                length: isset($r['CHARACTER_MAXIMUM_LENGTH']) ? (int) $r['CHARACTER_MAXIMUM_LENGTH'] : null,
+                precision: isset($r['NUMERIC_PRECISION']) ? (int) $r['NUMERIC_PRECISION'] : null,
+                scale: isset($r['NUMERIC_SCALE']) ? (int) $r['NUMERIC_SCALE'] : null,
+                comment: ($c = (string) $r['COLUMN_COMMENT']) !== '' ? $c : null,
+                enumValues: $rawType === 'enum' ? $this->parseEnumValues($columnType) : null,
+            );
+        }
+
+        return $out;
+    }
+
+    public function bulkForeignKeys(string $database, ?string $schema = null): array
+    {
+        $rows = $this->fetch(
+            'SELECT k.CONSTRAINT_NAME AS name, k.TABLE_NAME, k.COLUMN_NAME, k.ORDINAL_POSITION,
+                    k.REFERENCED_TABLE_SCHEMA AS ref_schema, k.REFERENCED_TABLE_NAME AS ref_table,
+                    k.REFERENCED_COLUMN_NAME AS ref_column,
+                    r.UPDATE_RULE AS on_update, r.DELETE_RULE AS on_delete
+             FROM information_schema.KEY_COLUMN_USAGE k
+             JOIN information_schema.REFERENTIAL_CONSTRAINTS r
+                  ON r.CONSTRAINT_NAME = k.CONSTRAINT_NAME AND r.CONSTRAINT_SCHEMA = k.TABLE_SCHEMA
+             WHERE k.TABLE_SCHEMA = ? AND k.REFERENCED_TABLE_NAME IS NOT NULL
+             ORDER BY k.TABLE_NAME, k.CONSTRAINT_NAME, k.ORDINAL_POSITION',
+            [$database],
+        );
+
+        $grouped = [];
+        foreach ($rows as $r) {
+            $tableKey = strtolower('.'.$r['TABLE_NAME']);
+            $fkName = (string) $r['name'];
+            $grouped[$tableKey][$fkName] ??= [
+                'columns' => [],
+                'ref_columns' => [],
+                'ref_table' => new TableIdentifier(name: (string) $r['ref_table'], database: $r['ref_schema'] ?? null),
+                'on_update' => $r['on_update'] !== '' ? (string) $r['on_update'] : null,
+                'on_delete' => $r['on_delete'] !== '' ? (string) $r['on_delete'] : null,
+            ];
+            $grouped[$tableKey][$fkName]['columns'][] = (string) $r['COLUMN_NAME'];
+            $grouped[$tableKey][$fkName]['ref_columns'][] = (string) $r['ref_column'];
+        }
+
+        $out = [];
+        foreach ($grouped as $tableKey => $byFk) {
+            foreach ($byFk as $fkName => $data) {
+                $out[$tableKey][] = new ForeignKeyDefinition(
+                    name: $fkName,
+                    columns: $data['columns'],
+                    referencedTable: $data['ref_table'],
+                    referencedColumns: $data['ref_columns'],
+                    onUpdate: $data['on_update'],
+                    onDelete: $data['on_delete'],
+                );
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * Read TABLE_ROWS from information_schema. Innodb stores a rough estimate
      * here that updates as the table grows — fine for UX, off by a few % on
      * write-heavy tables. MyISAM is exact.

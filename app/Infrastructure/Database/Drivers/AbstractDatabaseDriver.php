@@ -76,6 +76,40 @@ abstract class AbstractDatabaseDriver implements DatabaseDriverInterface
         return null;
     }
 
+    /**
+     * Slow default: iterate listTables + getColumns. Drivers should override
+     * to issue a single INFORMATION_SCHEMA query — this is what makes the
+     * ERD visualizer usable on remote/slow servers.
+     */
+    public function bulkColumns(string $database, ?string $schema = null): array
+    {
+        $out = [];
+        foreach ($this->listTables($database, $schema) as $table) {
+            $out[$this->tableKey($table)] = $this->getColumns($table);
+        }
+
+        return $out;
+    }
+
+    public function bulkForeignKeys(string $database, ?string $schema = null): array
+    {
+        $out = [];
+        foreach ($this->listTables($database, $schema) as $table) {
+            $out[$this->tableKey($table)] = $this->getForeignKeys($table);
+        }
+
+        return $out;
+    }
+
+    /**
+     * Composite-key shared by bulk lookups + the ERD generator so a table
+     * reference always lands in the same bucket.
+     */
+    final protected function tableKey(TableIdentifier $table): string
+    {
+        return strtolower(($table->schema ?? '').'.'.$table->name);
+    }
+
     public function select(string $sql, array $bindings = []): QueryResult
     {
         $start = microtime(true);

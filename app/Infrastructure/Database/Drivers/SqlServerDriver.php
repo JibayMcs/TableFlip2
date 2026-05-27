@@ -236,6 +236,127 @@ class SqlServerDriver extends AbstractDatabaseDriver
     }
 
     /**
+     * One INFORMATION_SCHEMA query covers the whole database — saves N
+     * round-trips on big catalogs (Sage SS2I tops 600 tables).
+     */
+    public function bulkColumns(string $database, ?string $schema = null): array
+    {
+        // Identify PKs first in one shot.
+        $pkRows = $this->fetch(
+            "SELECT tc.TABLE_SCHEMA, tc.TABLE_NAME, kcu.COLUMN_NAME
+             FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+             JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
+                  ON kcu.CONSTRAINT_NAME = tc.CONSTRAINT_NAME
+                 AND kcu.TABLE_SCHEMA = tc.TABLE_SCHEMA
+             WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
+               AND tc.TABLE_CATALOG = ?
+               ".($schema !== null ? "AND tc.TABLE_SCHEMA = ?" : ''),
+            $schema !== null ? [$database, $schema] : [$database],
+        );
+
+        $pk = [];
+        foreach ($pkRows as $r) {
+            $pk[strtolower($r['TABLE_SCHEMA'].'.'.$r['TABLE_NAME']).':'.$r['COLUMN_NAME']] = true;
+        }
+
+        // All columns of all tables in one query, plus identity flag.
+        $rows = $this->fetch(
+            "SELECT c.TABLE_SCHEMA, c.TABLE_NAME, c.COLUMN_NAME, c.DATA_TYPE,
+                    c.IS_NULLABLE, c.COLUMN_DEFAULT,
+                    c.CHARACTER_MAXIMUM_LENGTH, c.NUMERIC_PRECISION, c.NUMERIC_SCALE,
+                    COLUMNPROPERTY(OBJECT_ID(c.TABLE_SCHEMA + '.' + c.TABLE_NAME), c.COLUMN_NAME, 'IsIdentity') AS is_identity
+             FROM INFORMATION_SCHEMA.COLUMNS c
+             WHERE c.TABLE_CATALOG = ?
+               ".($schema !== null ? "AND c.TABLE_SCHEMA = ?" : '')."
+             ORDER BY c.TABLE_SCHEMA, c.TABLE_NAME, c.ORDINAL_POSITION",
+            $schema !== null ? [$database, $schema] : [$database],
+        );
+
+        $out = [];
+        foreach ($rows as $r) {
+            $key = strtolower($r['TABLE_SCHEMA'].'.'.$r['TABLE_NAME']);
+            $raw = (string) $r['DATA_TYPE'];
+
+            $out[$key][] = new ColumnDefinition(
+                name: (string) $r['COLUMN_NAME'],
+                rawType: $raw,
+                type: $this->normalizeType($raw),
+                nullable: strtoupper((string) $r['IS_NULLABLE']) === 'YES',
+                default: $r['COLUMN_DEFAULT'],
+                autoIncrement: (int) ($r['is_identity'] ?? 0) === 1,
+                isPrimaryKey: isset($pk[$key.':'.$r['COLUMN_NAME']]),
+                length: isset($r['CHARACTER_MAXIMUM_LENGTH']) ? (int) $r['CHARACTER_MAXIMUM_LENGTH'] : null,
+                precision: isset($r['NUMERIC_PRECISION']) ? (int) $r['NUMERIC_PRECISION'] : null,
+                scale: isset($r['NUMERIC_SCALE']) ? (int) $r['NUMERIC_SCALE'] : null,
+            );
+        }
+
+        return $out;
+    }
+
+    /**
+     * All FKs of the database via sys.* catalogs in one query, grouped per
+     * (parent_schema, parent_table) then per constraint name to rebuild
+     * composite keys correctly.
+     */
+    public function bulkForeignKeys(string $database, ?string $schema = null): array
+    {
+        $rows = $this->fetch(
+            'SELECT
+                ps.name AS parent_schema, pt.name AS parent_table,
+                fk.name AS fk_name,
+                pc.name AS parent_column,
+                rs.name AS ref_schema, rt.name AS ref_table, rc.name AS ref_column,
+                fk.update_referential_action_desc AS on_update,
+                fk.delete_referential_action_desc AS on_delete,
+                fkc.constraint_column_id
+             FROM sys.foreign_keys fk
+             JOIN sys.tables pt ON pt.object_id = fk.parent_object_id
+             JOIN sys.schemas ps ON ps.schema_id = pt.schema_id
+             JOIN sys.foreign_key_columns fkc ON fkc.constraint_object_id = fk.object_id
+             JOIN sys.columns pc ON pc.object_id = pt.object_id AND pc.column_id = fkc.parent_column_id
+             JOIN sys.tables rt ON rt.object_id = fk.referenced_object_id
+             JOIN sys.schemas rs ON rs.schema_id = rt.schema_id
+             JOIN sys.columns rc ON rc.object_id = rt.object_id AND rc.column_id = fkc.referenced_column_id
+             '.($schema !== null ? 'WHERE ps.name = ?' : '').'
+             ORDER BY ps.name, pt.name, fk.name, fkc.constraint_column_id',
+            $schema !== null ? [$schema] : [],
+        );
+
+        // Group rows of the same FK so composite keys come out as one entry.
+        $grouped = [];
+        foreach ($rows as $r) {
+            $tableKey = strtolower($r['parent_schema'].'.'.$r['parent_table']);
+            $fkName = (string) $r['fk_name'];
+            $grouped[$tableKey][$fkName] ??= [
+                'columns' => [],
+                'ref_columns' => [],
+                'ref_table' => new TableIdentifier(name: $r['ref_table'], schema: $r['ref_schema']),
+                'on_update' => $this->normalizeAction((string) $r['on_update']),
+                'on_delete' => $this->normalizeAction((string) $r['on_delete']),
+            ];
+            $grouped[$tableKey][$fkName]['columns'][] = (string) $r['parent_column'];
+            $grouped[$tableKey][$fkName]['ref_columns'][] = (string) $r['ref_column'];
+        }
+
+        $out = [];
+        foreach ($grouped as $tableKey => $byFk) {
+            foreach ($byFk as $fkName => $data) {
+                $out[$tableKey][] = new ForeignKeyDefinition(
+                    name: $fkName,
+                    columns: $data['columns'],
+                    referencedTable: $data['ref_table'],
+                    referencedColumns: $data['ref_columns'],
+                    onUpdate: $data['on_update'],
+                    onDelete: $data['on_delete'],
+                );
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * T-SQL pagination requires `OFFSET n ROWS FETCH NEXT m ROWS ONLY` AND an
      * ORDER BY. When the caller did not provide one we inject a deterministic
      * placeholder (`ORDER BY (SELECT NULL)`) which SQL Server accepts.

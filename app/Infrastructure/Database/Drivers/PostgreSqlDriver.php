@@ -220,6 +220,120 @@ class PostgreSqlDriver extends AbstractDatabaseDriver
     }
 
     /**
+     * Bulk columns of a database in 1 query — used by ErdGenerator to dodge
+     * N+1 on big schemas. Falls back to default per-table loop if the
+     * caller doesn't pass a schema (search_path is per-connection on PG).
+     */
+    public function bulkColumns(string $database, ?string $schema = null): array
+    {
+        $schema ??= $this->defaultSchema();
+
+        $rows = $this->fetch(
+            'SELECT c.table_name, c.column_name, c.udt_name AS raw_type, c.data_type,
+                    c.is_nullable, c.column_default, c.character_maximum_length,
+                    c.numeric_precision, c.numeric_scale,
+                    EXISTS (
+                        SELECT 1 FROM information_schema.table_constraints tc
+                        JOIN information_schema.key_column_usage kcu
+                          ON kcu.constraint_name = tc.constraint_name
+                         AND kcu.table_schema = tc.table_schema
+                        WHERE tc.constraint_type = \'PRIMARY KEY\'
+                          AND tc.table_schema = c.table_schema
+                          AND tc.table_name = c.table_name
+                          AND kcu.column_name = c.column_name
+                    ) AS is_primary
+             FROM information_schema.columns c
+             WHERE c.table_schema = ?
+             ORDER BY c.table_name, c.ordinal_position',
+            [$schema],
+        );
+
+        $out = [];
+        foreach ($rows as $r) {
+            $key = strtolower($schema.'.'.$r['table_name']);
+            $raw = (string) $r['raw_type'];
+            $default = $r['column_default'];
+
+            $out[$key][] = new ColumnDefinition(
+                name: (string) $r['column_name'],
+                rawType: $raw,
+                type: $this->normalizeType($raw, (string) $r['data_type']),
+                nullable: strtoupper((string) $r['is_nullable']) === 'YES',
+                default: $default,
+                autoIncrement: is_string($default) && str_starts_with($default, 'nextval('),
+                isPrimaryKey: (bool) $r['is_primary'],
+                length: isset($r['character_maximum_length']) ? (int) $r['character_maximum_length'] : null,
+                precision: isset($r['numeric_precision']) ? (int) $r['numeric_precision'] : null,
+                scale: isset($r['numeric_scale']) ? (int) $r['numeric_scale'] : null,
+            );
+        }
+
+        return $out;
+    }
+
+    public function bulkForeignKeys(string $database, ?string $schema = null): array
+    {
+        $schema ??= $this->defaultSchema();
+
+        $rows = $this->fetch(
+            'SELECT tc.constraint_name AS name,
+                    tc.table_name,
+                    kcu.column_name,
+                    kcu.ordinal_position,
+                    ccu.table_schema AS ref_schema,
+                    ccu.table_name AS ref_table,
+                    ccu.column_name AS ref_column,
+                    rc.update_rule AS on_update,
+                    rc.delete_rule AS on_delete
+             FROM information_schema.table_constraints tc
+             JOIN information_schema.key_column_usage kcu
+                  ON kcu.constraint_name = tc.constraint_name
+                 AND kcu.table_schema = tc.table_schema
+             JOIN information_schema.referential_constraints rc
+                  ON rc.constraint_name = tc.constraint_name
+                 AND rc.constraint_schema = tc.table_schema
+             JOIN information_schema.constraint_column_usage ccu
+                  ON ccu.constraint_name = tc.constraint_name
+                 AND ccu.constraint_schema = tc.table_schema
+             WHERE tc.constraint_type = \'FOREIGN KEY\'
+               AND tc.table_schema = ?
+             ORDER BY tc.table_name, tc.constraint_name, kcu.ordinal_position',
+            [$schema],
+        );
+
+        $grouped = [];
+        foreach ($rows as $r) {
+            $key = strtolower($schema.'.'.$r['table_name']);
+            $fk = (string) $r['name'];
+            $grouped[$key][$fk] ??= [
+                'columns' => [],
+                'ref_columns' => [],
+                'ref_table' => new TableIdentifier(name: (string) $r['ref_table'], schema: (string) $r['ref_schema']),
+                'on_update' => $r['on_update'] ? (string) $r['on_update'] : null,
+                'on_delete' => $r['on_delete'] ? (string) $r['on_delete'] : null,
+            ];
+            $grouped[$key][$fk]['columns'][] = (string) $r['column_name'];
+            $grouped[$key][$fk]['ref_columns'][] = (string) $r['ref_column'];
+        }
+
+        $out = [];
+        foreach ($grouped as $key => $byFk) {
+            foreach ($byFk as $fkName => $data) {
+                $out[$key][] = new ForeignKeyDefinition(
+                    name: $fkName,
+                    columns: $data['columns'],
+                    referencedTable: $data['ref_table'],
+                    referencedColumns: $data['ref_columns'],
+                    onUpdate: $data['on_update'],
+                    onDelete: $data['on_delete'],
+                );
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * Read pg_class.reltuples, the planner's row estimate. Refreshed by
      * ANALYZE / autovacuum; can be slightly stale but is instant.
      */
