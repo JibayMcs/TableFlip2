@@ -17,12 +17,13 @@
             <header class="bg-white border-b border-zinc-200">
                 <nav class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
                     <a href="{{ url('/') }}" class="flex items-center gap-2 font-semibold text-zinc-900">
-                        <span class="inline-flex h-7 w-7 items-center justify-center rounded-md bg-zinc-900 text-white text-sm">⇋</span>
-                        <span>{{ config('app.name') }}</span>
+                        <h1 class="table-flip-logo"></h1>
                     </a>
 
                     <div class="flex items-center gap-4 text-sm text-zinc-600">
                         @auth('web')
+                            <livewire:navbar.connection-switcher />
+
                             <a href="{{ route('profile') }}" class="hover:text-zinc-900">
                                 {{ auth('web')->user()->name }}
                             </a>

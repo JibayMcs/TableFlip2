@@ -1,0 +1,54 @@
+<div>
+    @if ($connections->isEmpty())
+        <a href="{{ route('connections.index') }}" class="hover:text-zinc-900">Connections</a>
+    @else
+        <div x-data="{ open: false }" @click.outside="open = false" @keydown.escape.window="open = false" class="relative">
+            <button type="button" @click="open = !open"
+                class="flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-sm hover:border-zinc-300">
+                @if ($active)
+                    <span class="size-2 rounded-full" style="background-color: {{ $active->color }}"></span>
+                    <span class="font-medium text-zinc-800">{{ $active->name }}</span>
+                    <span class="font-mono text-xs text-zinc-500">{{ $active->driver }}</span>
+                @else
+                    <span class="size-2 rounded-full bg-zinc-300"></span>
+                    <span class="text-zinc-500">No active connection</span>
+                @endif
+                <svg class="size-3 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </button>
+
+            <div x-show="open" x-cloak x-transition.opacity
+                class="absolute right-0 mt-1 w-72 rounded-md border border-zinc-200 bg-white shadow-lg z-50">
+                <div class="max-h-80 overflow-y-auto py-1">
+                    @foreach ($connections as $c)
+                        <button type="button"
+                            wire:click="activate({{ $c->id }})"
+                            wire:loading.attr="disabled"
+                            @click="open = false"
+                            class="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-zinc-50 {{ $c->id === $activeId ? 'bg-zinc-50' : '' }}">
+                            <span class="size-2 rounded-full" style="background-color: {{ $c->color }}"></span>
+                            <span class="flex-1 min-w-0 truncate">{{ $c->name }}</span>
+                            <span class="font-mono text-xs text-zinc-500">{{ $c->driver }}</span>
+                            @if ($c->id === $activeId)
+                                <span class="text-xs text-emerald-600">✓</span>
+                            @endif
+                        </button>
+                    @endforeach
+                </div>
+                <div class="border-t border-zinc-100 py-1">
+                    @if ($active)
+                        <button type="button" wire:click="deactivate" @click="open = false"
+                            class="w-full text-left px-3 py-2 text-xs text-zinc-500 hover:bg-zinc-50">
+                            Disconnect current
+                        </button>
+                    @endif
+                    <a href="{{ route('connections.index') }}"
+                        class="block px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50">
+                        Manage connections →
+                    </a>
+                </div>
+            </div>
+        </div>
+    @endif
+</div>

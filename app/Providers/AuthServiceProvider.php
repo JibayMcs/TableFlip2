@@ -7,7 +7,10 @@ namespace App\Providers;
 use App\Application\Auth\AllowedConnectionPolicy;
 use App\Infrastructure\Auth\Guards\DbSessionGuard;
 use App\Infrastructure\Database\DatabaseConnectionManager;
+use App\Models\DatabaseConnection;
+use App\Policies\DatabaseConnectionPolicy;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
 class AuthServiceProvider extends ServiceProvider
@@ -23,5 +26,7 @@ class AuthServiceProvider extends ServiceProvider
             session: $app['session.store'],
             connections: $app->make(DatabaseConnectionManager::class),
         ));
+
+        Gate::policy(DatabaseConnection::class, DatabaseConnectionPolicy::class);
     }
 }

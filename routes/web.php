@@ -3,6 +3,8 @@
 use App\Livewire\Admin\Users\Index as AdminUsersIndex;
 use App\Livewire\Auth\Login;
 use App\Livewire\Auth\Profile;
+use App\Livewire\Connections\Form as ConnectionForm;
+use App\Livewire\Connections\Index as ConnectionsIndex;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
@@ -27,6 +29,12 @@ Route::middleware('auth.tableflip')->group(function () {
 
 Route::middleware('auth:web')->group(function () {
     Route::get('/profile', Profile::class)->name('profile');
+
+    Route::prefix('connections')->name('connections.')->group(function () {
+        Route::get('/', ConnectionsIndex::class)->name('index');
+        Route::get('/new', ConnectionForm::class)->name('create');
+        Route::get('/{connection}/edit', ConnectionForm::class)->name('edit');
+    });
 });
 
 Route::middleware(['auth:web', 'role:admin'])->prefix('admin')->name('admin.')->group(function () {
