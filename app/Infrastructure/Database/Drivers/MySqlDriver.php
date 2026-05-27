@@ -189,6 +189,33 @@ class MySqlDriver extends AbstractDatabaseDriver
         return $fks;
     }
 
+    /**
+     * Read TABLE_ROWS from information_schema. Innodb stores a rough estimate
+     * here that updates as the table grows — fine for UX, off by a few % on
+     * write-heavy tables. MyISAM is exact.
+     */
+    public function estimateRowCount(TableIdentifier $table): ?int
+    {
+        $database = $table->database ?? $this->connectionConfig()->database;
+        if ($database === '') {
+            return null;
+        }
+
+        try {
+            $rows = $this->fetch(
+                'SELECT TABLE_ROWS AS estimate FROM information_schema.TABLES
+                 WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?',
+                [$database, $table->name],
+            );
+        } catch (\Throwable) {
+            return null;
+        }
+
+        $value = $rows[0]['estimate'] ?? null;
+
+        return $value === null ? null : (int) $value;
+    }
+
     public function quoteIdentifier(string $identifier): string
     {
         return '`'.str_replace('`', '``', $identifier).'`';

@@ -73,6 +73,21 @@ trait HasRowEditing
         $this->editingRowKey = $rowKey;
     }
 
+    /**
+     * Variant of {@see startEdit()} for cells whose value was truncated in
+     * the rendered HTML — we re-fetch the full value via a single-cell SELECT
+     * scoped by PK before opening the editor.
+     */
+    public function startEditFetch(
+        int $rowIndex,
+        string $column,
+        array $rowKey,
+        ?string $columnType = null,
+    ): void {
+        $value = $this->loadCellValue($rowKey, $column, app(CurrentConnection::class));
+        $this->startEdit($rowIndex, $column, $value, $rowKey, $columnType);
+    }
+
     public function cancelEdit(): void
     {
         $this->editingRowIndex = null;

@@ -85,18 +85,39 @@
         </div>
     @endif
 
-    {{-- Toolbar --}}
+    {{-- Toolbar + Filter builder (Alpine local state so opening/typing doesn't ping the server) --}}
+    @php
+        $emptyFilterRow = ['column' => '', 'operator' => '=', 'value' => null];
+        $initialFilters = count($filters) > 0 ? $filters : [$emptyFilterRow];
+    @endphp
+    <div x-data="{
+            showFilters: @js($showFilters || count($filters) > 0),
+            filters: @js($initialFilters),
+            operators: @js($this->operatorChoices()),
+            addRow() { this.filters.push({ column: '', operator: '=', value: null }); },
+            removeRow(i) { this.filters.splice(i, 1); if (this.filters.length === 0) this.addRow(); },
+            clearAll() { this.filters = [{ column: '', operator: '=', value: null }]; $wire.set('filters', [], false); $wire.clearFilters(); },
+            apply() {
+                const cleaned = this.filters.filter(f => f.column !== '');
+                $wire.set('filters', cleaned, false);
+                $wire.applyFilters();
+            },
+            valuelessOps: ['is_null', 'is_not_null'],
+            isValueless(op) { return this.valuelessOps.includes(op); },
+            activeCount() { return this.filters.filter(f => f.column !== '').length; },
+        }" class="space-y-4">
     <div class="flex items-center justify-between gap-3 flex-wrap">
         <div class="flex items-center gap-2 flex-wrap">
             @if ($mode === 'natural')
-                <button type="button" wire:click="toggleFilters"
-                    class="text-xs px-2.5 py-1.5 rounded border border-zinc-300 hover:bg-zinc-50 {{ $showFilters ? 'bg-zinc-100 border-zinc-400' : '' }}">
-                    Filters {{ count($filters) > 0 ? '('.count($filters).')' : '' }}
+                <button type="button" @click="showFilters = !showFilters"
+                    :class="showFilters ? 'bg-zinc-100 border-zinc-400' : ''"
+                    class="text-xs px-2.5 py-1.5 rounded border border-zinc-300 hover:bg-zinc-50">
+                    Filters <template x-if="activeCount() > 0"><span x-text="'(' + activeCount() + ')'"></span></template>
                 </button>
-                @if (count($filters) > 0)
-                    <button type="button" wire:click="clearFilters"
+                <template x-if="activeCount() > 0">
+                    <button type="button" @click="clearAll()"
                         class="text-xs text-zinc-500 hover:text-zinc-700 underline">Clear all</button>
-                @endif
+                </template>
                 @if (count($sort) > 0)
                     <button type="button" wire:click="$set('sort', [])"
                         class="text-xs text-zinc-500 hover:text-zinc-700 underline">Reset sort</button>
@@ -123,6 +144,72 @@
             @endif
         </div>
         <div class="flex items-center gap-3 text-xs text-zinc-500">
+            {{-- Column visibility picker — Alpine-driven so opening the dropdown / typing in the search costs zero roundtrips. --}}
+            @php
+                $hiddenCount = count($hiddenColumns);
+                $autoHidden = $autoHideEmpty ? count($emptyColumns ?? []) : 0;
+            @endphp
+            <div x-data="{
+                    open: false,
+                    q: '',
+                    hidden: @js($hiddenColumns),
+                    isHidden(c) { return this.hidden.includes(c); },
+                    toggle(c) {
+                        const i = this.hidden.indexOf(c);
+                        if (i >= 0) this.hidden.splice(i, 1); else this.hidden.push(c);
+                        $wire.set('hiddenColumns', this.hidden, false);
+                    },
+                    commit() { $wire.$commit(); },
+                    showAll() { this.hidden = []; $wire.showAllColumns(); this.open = false; },
+                }" @click.outside="if (open) { open = false; commit(); }" class="relative">
+                <button type="button" @click="open = !open"
+                    class="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded border border-zinc-300 hover:bg-zinc-50">
+                    <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                        <line x1="9" y1="3" x2="9" y2="21"/>
+                        <line x1="15" y1="3" x2="15" y2="21"/>
+                    </svg>
+                    <span>Columns ({{ count($visibleColumns) }}/{{ count($columns) }})</span>
+                </button>
+                <div x-show="open" x-transition.opacity x-cloak
+                    class="absolute right-0 mt-1 w-72 max-h-[70vh] z-40 bg-white border border-zinc-200 rounded-md shadow-lg flex flex-col">
+                    <div class="p-2 border-b border-zinc-100 space-y-2">
+                        <input type="search" x-model="q" placeholder="Filter columns…" autofocus
+                            class="w-full rounded border border-zinc-300 px-2 py-1 text-xs" />
+                        <label class="flex items-center gap-1.5 text-xs text-zinc-700 cursor-pointer">
+                            <input type="checkbox" @checked($autoHideEmpty)
+                                wire:click="toggleAutoHideEmpty"
+                                class="rounded border-zinc-300" />
+                            Auto-hide empty columns
+                            @if ($autoHideEmpty && $autoHidden > 0)
+                                <span class="text-[10px] text-zinc-400">({{ $autoHidden }} hidden)</span>
+                            @endif
+                        </label>
+                    </div>
+                    <div class="overflow-y-auto flex-1 p-1">
+                        @foreach ($columns as $col)
+                            @php $isPk = ($columnDefs[$col] ?? null)?->isPrimaryKey ?? false; @endphp
+                            <label x-show="q === '' || '{{ strtolower($col) }}'.includes(q.toLowerCase())"
+                                class="flex items-center gap-2 px-2 py-1 text-xs rounded hover:bg-zinc-50 cursor-pointer">
+                                <input type="checkbox"
+                                    :checked="!isHidden('{{ $col }}')"
+                                    @if ($isPk) disabled @endif
+                                    @change="toggle('{{ $col }}')"
+                                    class="rounded border-zinc-300 disabled:opacity-50" />
+                                <span class="font-mono truncate flex-1 {{ $isPk ? 'text-amber-700' : 'text-zinc-700' }}">{{ $col }}</span>
+                                @if ($isPk) <span class="text-[10px] text-amber-700">PK</span> @endif
+                            </label>
+                        @endforeach
+                    </div>
+                    <div class="p-2 border-t border-zinc-100 flex items-center justify-between">
+                        <button type="button" @click="showAll()"
+                            class="text-[10px] text-zinc-500 hover:text-zinc-900 underline">Show all</button>
+                        <button type="button" @click="open = false; commit();"
+                            class="text-[10px] px-2 py-1 bg-zinc-900 text-white rounded hover:bg-zinc-800">Done</button>
+                    </div>
+                </div>
+            </div>
+
             @if (! $error && $exportConnectionId !== null)
                 <livewire:exports.launcher
                     wire:key="export-launcher-{{ $mode }}-{{ $table }}"
@@ -132,7 +219,23 @@
                     :connection-id="$exportConnectionId"
                     :database-name="$database" />
             @endif
-            <span><span class="font-mono font-medium text-zinc-700">{{ number_format($total) }}</span> rows</span>
+            <span class="inline-flex items-center gap-1">
+                @if ($totalIsEstimate ?? false)
+                    <span x-tooltip.bottom="Approximate count from engine stats — click to compute exact value">≈</span>
+                    <span class="font-mono font-medium text-zinc-700">{{ number_format($total) }}</span> rows
+                    <button type="button" wire:click="refreshExactCount"
+                        wire:loading.attr="disabled" wire:target="refreshExactCount"
+                        x-tooltip.bottom="Run exact COUNT(*) (may be slow on huge tables)"
+                        class="ml-1 text-zinc-400 hover:text-zinc-900">
+                        <svg class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="1 4 1 10 7 10"/>
+                            <path d="M3.51 15a9 9 0 102.13-9.36L1 10"/>
+                        </svg>
+                    </button>
+                @else
+                    <span class="font-mono font-medium text-zinc-700">{{ number_format($total) }}</span> rows
+                @endif
+            </span>
             @if ($mode === 'natural')
                 <label class="flex items-center gap-1">
                     Per page
@@ -167,40 +270,42 @@
         </div>
     @endif
 
-    {{-- Filter builder --}}
-    @if ($mode === 'natural' && $showFilters)
-        <div class="bg-white border border-zinc-200 rounded-md p-3">
+    {{-- Filter builder (Alpine-driven) --}}
+    @if ($mode === 'natural')
+        <div x-show="showFilters" x-transition.opacity class="bg-white border border-zinc-200 rounded-md p-3">
             <div class="space-y-2">
-                @foreach ($filters as $i => $f)
-                    <div class="flex items-center gap-2" wire:key="filter-{{ $i }}">
-                        <select wire:model="filters.{{ $i }}.column" class="text-xs border border-zinc-300 rounded px-2 py-1 max-w-xs">
+                <template x-for="(f, i) in filters" :key="i">
+                    <div class="flex items-center gap-2">
+                        <select x-model="f.column" class="text-xs border border-zinc-300 rounded px-2 py-1 max-w-xs">
                             <option value="">— column —</option>
                             @foreach ($columns as $col)
                                 <option value="{{ $col }}">{{ $col }}</option>
                             @endforeach
                         </select>
-                        <select wire:model.live="filters.{{ $i }}.operator" class="text-xs border border-zinc-300 rounded px-2 py-1">
-                            @foreach ($this->operatorChoices() as $opt)
-                                <option value="{{ $opt['value'] }}">{{ $opt['label'] }}</option>
-                            @endforeach
+                        <select x-model="f.operator" class="text-xs border border-zinc-300 rounded px-2 py-1">
+                            <template x-for="opt in operators" :key="opt.value">
+                                <option :value="opt.value" x-text="opt.label"></option>
+                            </template>
                         </select>
-                        @if (! in_array($f['operator'], ['is_null', 'is_not_null']))
-                            <input type="text" wire:model="filters.{{ $i }}.value" placeholder="value"
-                                class="text-xs border border-zinc-300 rounded px-2 py-1 flex-1 min-w-0" />
-                        @endif
-                        <button type="button" wire:click="removeFilter({{ $i }})"
+                        <input type="text" x-model="f.value" placeholder="value"
+                            x-show="!isValueless(f.operator)"
+                            @keydown.enter.prevent="apply()"
+                            class="text-xs border border-zinc-300 rounded px-2 py-1 flex-1 min-w-0" />
+                        <button type="button" @click="removeRow(i)"
                             class="text-zinc-400 hover:text-rose-600 text-base leading-none px-1" title="Remove">×</button>
                     </div>
-                @endforeach
+                </template>
             </div>
             <div class="mt-3 flex items-center gap-2 pt-2 border-t border-zinc-100">
-                <button type="button" wire:click="addFilter"
+                <button type="button" @click="addRow()"
                     class="text-xs px-2.5 py-1 border border-dashed border-zinc-300 rounded hover:bg-zinc-50">+ Add filter</button>
-                <button type="button" wire:click="applyFilters"
+                <button type="button" @click="apply()"
                     class="text-xs px-3 py-1 bg-zinc-900 text-white rounded hover:bg-zinc-800">Apply</button>
+                <span class="text-[10px] text-zinc-400 ml-2">Enter to apply · panel is local until Apply</span>
             </div>
         </div>
     @endif
+    </div>{{-- /Alpine filter wrapper --}}
 
     {{-- Data table --}}
     @if ($error)
@@ -222,7 +327,7 @@
                 <thead class="text-left text-xs uppercase text-zinc-500 border-b border-zinc-200 bg-zinc-50">
                     <tr>
                         <th class="px-3 py-2 w-8 sticky left-0 z-20 bg-zinc-50 shadow-[1px_0_0_rgb(228_228_231)]"></th>
-                        @foreach ($columns as $col)
+                        @foreach ($visibleColumns as $col)
                             @php
                                 $sortDir = collect($sort)->firstWhere('column', $col)['direction'] ?? null;
                                 $def = $columnDefs[$col] ?? null;
@@ -271,7 +376,7 @@
                     @if ($insertDraft !== null)
                         <tr class="border-b border-zinc-200 bg-blue-50" wire:key="insert-draft">
                             <td class="px-3 py-1.5 text-center text-xs text-blue-600 sticky left-0 z-10 bg-blue-50 shadow-[1px_0_0_rgb(228_228_231)]">+</td>
-                            @foreach ($columns as $col)
+                            @foreach ($visibleColumns as $col)
                                 <td class="px-3 py-1 align-top">
                                     @if (! array_key_exists($col, $insertDraft))
                                         <span class="text-xs text-zinc-400 italic">auto</span>
@@ -297,19 +402,24 @@
                         @php
                             $rowKey = $this->rowKeyOf($row, $pkColumns);
                             $isSelected = $this->isRowSelected($rowKey);
+                            // Hoisted ONCE per row instead of N times per cell — saves megabytes of
+                            // duplicated JSON when the row has lots of visible columns.
+                            $rowKeyJson = \Illuminate\Support\Js::from($rowKey);
                         @endphp
                         <tr class="group border-b border-zinc-100 last:border-0 {{ $isSelected ? 'bg-amber-50' : 'bg-white hover:bg-zinc-50' }}" wire:key="row-{{ $i }}">
                             <td class="px-3 py-1.5 sticky left-0 z-10 shadow-[1px_0_0_rgb(228_228_231)] {{ $isSelected ? 'bg-amber-50' : 'bg-white group-hover:bg-zinc-50' }}">
                                 <input type="checkbox" @checked($isSelected)
-                                    wire:click="toggleSelectRow({{ Js::from($rowKey) }})"
+                                    wire:click="toggleSelectRow({!! $rowKeyJson !!})"
                                     class="rounded border-zinc-300" />
                             </td>
-                            @foreach ($columns as $col)
+                            @foreach ($visibleColumns as $col)
                                 @php
                                     $isEditing = $editingRowIndex === $i && $editingColumn === $col;
                                     $def = $columnDefs[$col] ?? null;
                                     $isPk = $def?->isPrimaryKey ?? false;
                                     $typeValue = $def?->type->value;
+                                    $cellValue = $row[$col] ?? null;
+                                    $wasTruncated = isset(($truncatedCells ?? [])[$i][$col]);
                                 @endphp
                                 <td class="px-3 py-1 font-mono text-xs align-top">
                                     @if ($isEditing)
@@ -321,24 +431,32 @@
                                     @else
                                         <span
                                             @if (! $isPk || $hasPrimaryKey === false)
-                                                @click="$wire.startEdit({{ $i }}, {{ Js::from($col) }}, {{ Js::from($row[$col] ?? null) }}, {{ Js::from($rowKey) }}, {{ Js::from($typeValue) }})"
+                                                @if ($wasTruncated)
+                                                    @click="$wire.startEditFetch({{ $i }}, {{ Js::from($col) }}, {!! $rowKeyJson !!}, {{ Js::from($typeValue) }})"
+                                                @else
+                                                    @click="$wire.startEdit({{ $i }}, {{ Js::from($col) }}, {{ Js::from($cellValue) }}, {!! $rowKeyJson !!}, {{ Js::from($typeValue) }})"
+                                                @endif
                                                 class="block max-w-md truncate cursor-text hover:bg-yellow-50 rounded px-1 -mx-1"
                                             @else
                                                 class="block max-w-md truncate text-zinc-500"
                                                 title="Primary key — read-only"
                                             @endif
-                                            @if ($row[$col] !== null) title="{{ (string) $row[$col] }}" @endif >
-                                            @if ($row[$col] === null)
+                                            @if ($cellValue !== null && ! $wasTruncated) title="{{ (string) $cellValue }}" @endif
+                                            @if ($wasTruncated) title="value truncated for display — click to load full content" @endif >
+                                            @if ($cellValue === null)
                                                 <span class="text-zinc-400 italic">null</span>
                                             @else
-                                                {{ (string) $row[$col] }}
+                                                {{ (string) $cellValue }}
+                                                @if ($wasTruncated)
+                                                    <span class="ml-1 text-[10px] text-zinc-400 italic">(truncated)</span>
+                                                @endif
                                             @endif
                                         </span>
                                     @endif
                                 </td>
                             @endforeach
                             <td class="px-2 py-1 text-right sticky right-0 z-10 shadow-[-1px_0_0_rgb(228_228_231)] {{ $isSelected ? 'bg-amber-50' : 'bg-white group-hover:bg-zinc-50' }}">
-                                <button wire:click="deleteRow({{ Js::from($rowKey) }})"
+                                <button wire:click="deleteRow({!! $rowKeyJson !!})"
                                     wire:confirm="Delete this row?"
                                     class="text-zinc-300 hover:text-rose-600 text-base leading-none"
                                     title="Delete row">×</button>
@@ -346,7 +464,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="{{ count($columns) + 2 }}" class="text-center py-12 text-zinc-400 text-sm">
+                            <td colspan="{{ count($visibleColumns) + 2 }}" class="text-center py-12 text-zinc-400 text-sm">
                                 No rows match the current filters.
                             </td>
                         </tr>

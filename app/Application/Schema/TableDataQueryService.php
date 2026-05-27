@@ -17,6 +17,11 @@ class TableDataQueryService
      * and ORDER BY sort. All user-supplied identifiers are quoted via the
      * driver and all values are passed as bound parameters.
      *
+     * When `$skipCount` is true (caller already knows the row count and just
+     * needs the page data — e.g. on pagination/sort change without filter
+     * change) the COUNT(*) is skipped entirely; `total` is returned as -1 so
+     * the caller can detect "not refreshed" and keep its memoized value.
+     *
      * @param  list<Filter>  $filters
      * @param  list<Sort>  $sort
      * @return array{rows: list<array<string, mixed>>, total: int, columns: list<string>}
@@ -28,6 +33,7 @@ class TableDataQueryService
         array $sort = [],
         int $page = 1,
         int $perPage = 50,
+        bool $skipCount = false,
     ): array {
         $qualified = $driver->qualify($table);
 
@@ -39,14 +45,17 @@ class TableDataQueryService
         $offset = ($page - 1) * $perPage;
 
         $dataSql = $driver->paginate("SELECT * FROM {$qualified}{$whereClause}", $orderClause, $perPage, $offset);
-        $countSql = "SELECT COUNT(*) AS c FROM {$qualified}{$whereClause}";
 
         $dataResult = $driver->select($dataSql, $bindings);
         $rows = is_array($dataResult->rows) ? $dataResult->rows : iterator_to_array($dataResult->rows);
 
-        $countResult = $driver->select($countSql, $bindings);
-        $countRows = is_array($countResult->rows) ? $countResult->rows : iterator_to_array($countResult->rows);
-        $total = (int) ($countRows[0]['c'] ?? 0);
+        $total = -1;
+        if (! $skipCount) {
+            $countSql = "SELECT COUNT(*) AS c FROM {$qualified}{$whereClause}";
+            $countResult = $driver->select($countSql, $bindings);
+            $countRows = is_array($countResult->rows) ? $countResult->rows : iterator_to_array($countResult->rows);
+            $total = (int) ($countRows[0]['c'] ?? 0);
+        }
 
         return [
             'rows' => $rows,

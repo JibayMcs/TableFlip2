@@ -47,6 +47,36 @@ class TableData extends Component
 
     public bool $showFilters = false;
 
+    /**
+     * Manually-hidden columns. URL-synced so the user's preference survives a
+     * navigate / reload (it's per-table because each table has its own column
+     * set; signature changes on table switch via {@see clearOnTableChange}).
+     *
+     * @var list<string>
+     */
+    #[Url(as: 'hide', except: [])]
+    public array $hiddenColumns = [];
+
+    /**
+     * Hide columns that are NULL/empty for every row on the current page.
+     * Crucial on wide ERP tables (Sage SaleDocument has 549 columns, only a
+     * few dozen ever populated for a given document type).
+     */
+    #[Url(as: 'ahe', except: true)]
+    public bool $autoHideEmpty = true;
+
+    /**
+     * Cached row count + signature of the filters it was computed against.
+     * Pagination/sort changes reuse the cached value (massive win on slow
+     * remote servers where COUNT(*) on a 280k-row table costs as much as the
+     * SELECT itself); filter changes invalidate it.
+     */
+    public ?int $cachedTotal = null;
+
+    public string $cachedTotalSignature = '';
+
+    public bool $totalIsEstimate = false;
+
     public function mount(string $database, string $table, ?string $schema = null): void
     {
         $this->database = $database;
@@ -71,6 +101,53 @@ class TableData extends Component
         $this->filters = [];
         $this->sort = [];
         $this->page = 1;
+        $this->hiddenColumns = [];
+        $this->invalidateTotal();
+    }
+
+    /**
+     * Toggle a single column's visibility. Local roundtrip; the picker UI
+     * does its checkbox toggling in Alpine then commits on close.
+     */
+    public function toggleColumnVisibility(string $column): void
+    {
+        if (in_array($column, $this->hiddenColumns, true)) {
+            $this->hiddenColumns = array_values(array_diff($this->hiddenColumns, [$column]));
+        } else {
+            $this->hiddenColumns[] = $column;
+        }
+    }
+
+    public function showAllColumns(): void
+    {
+        $this->hiddenColumns = [];
+        $this->autoHideEmpty = false;
+    }
+
+    public function toggleAutoHideEmpty(): void
+    {
+        $this->autoHideEmpty = ! $this->autoHideEmpty;
+    }
+
+    /**
+     * Drop the memoized count + estimate flag. Call from anywhere the table
+     * shape or filter set changes in a way that invalidates the previous
+     * total (filter apply/clear, table switch, custom-SQL execute…).
+     */
+    public function invalidateTotal(): void
+    {
+        $this->cachedTotal = null;
+        $this->cachedTotalSignature = '';
+        $this->totalIsEstimate = false;
+    }
+
+    /**
+     * Force a real COUNT(*) on the next render even if we have an estimate.
+     * Wired to a small "compter exact" button when total is approximate.
+     */
+    public function refreshExactCount(): void
+    {
+        $this->invalidateTotal();
     }
 
     public function toggleFilters(): void
@@ -91,17 +168,20 @@ class TableData extends Component
         unset($this->filters[$index]);
         $this->filters = array_values($this->filters);
         $this->page = 1;
+        $this->invalidateTotal();
     }
 
     public function clearFilters(): void
     {
         $this->filters = [];
         $this->page = 1;
+        $this->invalidateTotal();
     }
 
     public function applyFilters(): void
     {
         $this->page = 1;
+        $this->invalidateTotal();
     }
 
     public function updatedPerPage(): void
@@ -145,6 +225,142 @@ class TableData extends Component
         $this->page = max(1, $page);
     }
 
+    /**
+     * Maximum number of characters to inline into the rendered HTML for any
+     * single cell. Without this cap, a SaleDocument-style table with a few
+     * nvarchar(max) / XML columns can produce a 30+ MB Livewire response per
+     * page just from text values dragged into `title` attributes and click
+     * handlers. The full value is still fetched on demand for editing.
+     */
+    private const CELL_DISPLAY_CAP = 240;
+
+    /**
+     * Cell value asked back from the browser when the user clicks a truncated
+     * cell. Returns the full value via a single-row SELECT, scoped by PK.
+     *
+     * @param  array<string, scalar|null>  $rowKey
+     */
+    public function loadCellValue(array $rowKey, string $column, CurrentConnection $current): ?string
+    {
+        $driver = $current->driver();
+        if ($driver === null || $rowKey === []) {
+            return null;
+        }
+
+        // Build a WHERE matching the row's PK columns only — same shape as
+        // the inline edit pipeline uses, but for a single column projection.
+        $where = [];
+        $bindings = [];
+        foreach ($rowKey as $col => $value) {
+            $where[] = $driver->quoteIdentifier((string) $col).' = ?';
+            $bindings[] = $value;
+        }
+
+        $sql = 'SELECT '.$driver->quoteIdentifier($column)
+            .' AS v FROM '.$driver->qualify($this->currentTableIdentifier())
+            .' WHERE '.implode(' AND ', $where);
+
+        try {
+            $result = $driver->select($sql, $bindings);
+        } catch (Throwable) {
+            return null;
+        }
+
+        $rows = is_array($result->rows) ? $result->rows : iterator_to_array($result->rows);
+        $value = $rows[0]['v'] ?? null;
+
+        return $value === null ? null : (string) $value;
+    }
+
+    /**
+     * Strip wide string values down to {@see CELL_DISPLAY_CAP} chars. Skips
+     * PK columns (used to build rowKey) and non-string values. Returns the
+     * trimmed rows plus a parallel map [rowIndex => [col => true]] flagging
+     * the cells that were truncated.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @param  list<string>  $pkColumns
+     * @return array{0: list<array<string, mixed>>, 1: array<int, array<string, true>>}
+     */
+    private function capRowsForDisplay(array $rows, array $pkColumns): array
+    {
+        $truncated = [];
+
+        foreach ($rows as $i => $row) {
+            foreach ($row as $col => $value) {
+                if (in_array($col, $pkColumns, true) || ! is_string($value)) {
+                    continue;
+                }
+                if (mb_strlen($value) > self::CELL_DISPLAY_CAP) {
+                    $rows[$i][$col] = mb_substr($value, 0, self::CELL_DISPLAY_CAP).'…';
+                    $truncated[$i][$col] = true;
+                }
+            }
+        }
+
+        return [$rows, $truncated];
+    }
+
+    /**
+     * Detect columns that are NULL or empty-string for every row on the
+     * current page. Returns the list of column names that *can* be hidden by
+     * the auto-hide feature (caller decides whether to actually hide them).
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @param  list<string>  $columns
+     * @return list<string>
+     */
+    private function detectEmptyColumns(array $rows, array $columns): array
+    {
+        if ($rows === []) {
+            return [];
+        }
+
+        $empty = [];
+        foreach ($columns as $col) {
+            $allEmpty = true;
+            foreach ($rows as $row) {
+                $value = $row[$col] ?? null;
+                if ($value !== null && $value !== '' && $value !== 0 && $value !== '0' && $value !== false) {
+                    $allEmpty = false;
+                    break;
+                }
+            }
+            if ($allEmpty) {
+                $empty[] = $col;
+            }
+        }
+
+        return $empty;
+    }
+
+    /**
+     * Final list of columns the view should actually render, accounting for
+     * manual hides + auto-hide empty + PK columns being always visible.
+     *
+     * @param  list<string>  $columns
+     * @param  list<string>  $emptyColumns
+     * @param  list<string>  $pkColumns
+     * @return list<string>
+     */
+    private function resolveVisibleColumns(array $columns, array $emptyColumns, array $pkColumns): array
+    {
+        return array_values(array_filter($columns, function (string $col) use ($emptyColumns, $pkColumns) {
+            // PK columns are always visible — needed to identify rows for edit / delete.
+            if (in_array($col, $pkColumns, true)) {
+                return true;
+            }
+            if (in_array($col, $this->hiddenColumns, true)) {
+                return false;
+            }
+            if ($this->autoHideEmpty && in_array($col, $emptyColumns, true)) {
+                return false;
+            }
+
+            return true;
+        }));
+    }
+
     public function render(
         CurrentConnection $current,
         TableDataQueryService $service,
@@ -179,15 +395,23 @@ class TableData extends Component
         // so render is purely a display step — no re-execution, no risk of
         // re-triggering destructive guards or doubling history entries.
         if ($this->customSql !== '') {
+            [$customRowsForDisplay, $customTruncatedCells] = $this->capRowsForDisplay($this->customRows, $pkColumns);
+            $customEmpty = $this->detectEmptyColumns($customRowsForDisplay, $this->customColumns);
+            $customVisible = $this->resolveVisibleColumns($this->customColumns, $customEmpty, $pkColumns);
+
             return view('livewire.explorer.table-data', [
                 'error' => null,
                 'mode' => 'custom',
-                'rows' => $this->customRows,
+                'rows' => $customRowsForDisplay,
+                'truncatedCells' => $customTruncatedCells,
                 'columns' => $this->customColumns,
+                'visibleColumns' => $customVisible,
+                'emptyColumns' => $customEmpty,
                 'columnDefs' => $columnDefs,
                 'pkColumns' => $pkColumns,
                 'hasPrimaryKey' => $pkColumns !== [],
                 'total' => count($this->customRows),
+                'totalIsEstimate' => false,
                 'totalPages' => 1,
                 'autocompleteSchema' => $autocompleteSchema,
                 'dialect' => $dialectName,
@@ -222,23 +446,58 @@ class TableData extends Component
             $this->sort,
         );
 
+        // Decide whether we can skip COUNT(*). We always need a count for the
+        // pagination math, but the same value can be reused across page/sort
+        // changes as long as the filter set is identical.
+        $signature = $this->filtersSignature($filters);
+        $skipCount = $this->cachedTotal !== null && $this->cachedTotalSignature === $signature;
+
         try {
-            $result = $service->query($driver, $tableId, $filters, $sortRules, $this->page, $this->perPage);
+            $result = $service->query($driver, $tableId, $filters, $sortRules, $this->page, $this->perPage, skipCount: $skipCount);
         } catch (Throwable $e) {
             return view('livewire.explorer.table-data', $this->emptyView($e->getMessage()));
         }
 
-        $totalPages = max(1, (int) ceil($result['total'] / $this->perPage));
+        // Resolve the total : fresh COUNT > memoized exact count > approximate
+        // estimate from the engine catalog (only when no filter is active).
+        if ($result['total'] >= 0) {
+            $this->cachedTotal = $result['total'];
+            $this->cachedTotalSignature = $signature;
+            $this->totalIsEstimate = false;
+        } elseif ($this->cachedTotal === null) {
+            // Should not happen (skipCount only true when cached), but defend.
+            $this->cachedTotal = 0;
+        }
+
+        if ($this->cachedTotal === 0 && $filters === [] && ! $this->totalIsEstimate) {
+            $estimate = $driver->estimateRowCount($tableId);
+            if ($estimate !== null && $estimate > 0) {
+                $this->cachedTotal = $estimate;
+                $this->cachedTotalSignature = $signature;
+                $this->totalIsEstimate = true;
+            }
+        }
+
+        $total = $this->cachedTotal ?? 0;
+        $totalPages = max(1, (int) ceil($total / $this->perPage));
+
+        [$rowsForDisplay, $truncatedCells] = $this->capRowsForDisplay($result['rows'], $pkColumns);
+        $emptyColumns = $this->detectEmptyColumns($rowsForDisplay, $result['columns']);
+        $visibleColumns = $this->resolveVisibleColumns($result['columns'], $emptyColumns, $pkColumns);
 
         return view('livewire.explorer.table-data', [
             'error' => null,
             'mode' => 'natural',
-            'rows' => $result['rows'],
+            'rows' => $rowsForDisplay,
+            'truncatedCells' => $truncatedCells,
             'columns' => $result['columns'],
+            'visibleColumns' => $visibleColumns,
+            'emptyColumns' => $emptyColumns,
             'columnDefs' => $columnDefs,
             'pkColumns' => $pkColumns,
             'hasPrimaryKey' => $pkColumns !== [],
-            'total' => $result['total'],
+            'total' => $total,
+            'totalIsEstimate' => $this->totalIsEstimate,
             'totalPages' => $totalPages,
             'autocompleteSchema' => $autocompleteSchema,
             'dialect' => $dialectName,
@@ -246,6 +505,24 @@ class TableData extends Component
             'exportSourceKind' => 'table',
             'exportSourcePayload' => $exportSourcePayload,
         ]);
+    }
+
+    /**
+     * Stable signature of the active filter set — used to decide whether the
+     * memoized total is still valid.
+     *
+     * @param  list<\App\Domain\Database\Query\Filter>  $filters
+     */
+    private function filtersSignature(array $filters): string
+    {
+        if ($filters === []) {
+            return '';
+        }
+
+        return md5(serialize(array_map(
+            static fn ($f) => [$f->column, $f->operator->value, $f->value],
+            $filters,
+        )));
     }
 
     /**
@@ -278,11 +555,15 @@ class TableData extends Component
             'error' => $error,
             'mode' => 'natural',
             'rows' => [],
+            'truncatedCells' => [],
             'columns' => [],
+            'visibleColumns' => [],
+            'emptyColumns' => [],
             'columnDefs' => [],
             'pkColumns' => [],
             'hasPrimaryKey' => false,
             'total' => 0,
+            'totalIsEstimate' => false,
             'totalPages' => 1,
             'autocompleteSchema' => [],
             'dialect' => 'mysql',

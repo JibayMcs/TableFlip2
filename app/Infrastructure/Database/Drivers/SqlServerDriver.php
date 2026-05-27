@@ -203,6 +203,33 @@ class SqlServerDriver extends AbstractDatabaseDriver
         return $fks;
     }
 
+    /**
+     * Read the heap/clustered-index row count from sys.dm_db_partition_stats.
+     * index_id IN (0, 1) covers heap and clustered indexes — summing them
+     * across partitions gives the table's effective row count. This is
+     * orders of magnitude faster than COUNT(*) on big tables.
+     */
+    public function estimateRowCount(TableIdentifier $table): ?int
+    {
+        $schema = $table->schema ?? 'dbo';
+        $object = $this->quoteIdentifier($schema).'.'.$this->quoteIdentifier($table->name);
+
+        try {
+            $rows = $this->fetch(
+                'SELECT CAST(SUM(p.row_count) AS BIGINT) AS estimate
+                 FROM sys.dm_db_partition_stats p
+                 WHERE p.object_id = OBJECT_ID(?) AND p.index_id IN (0, 1)',
+                [$object],
+            );
+        } catch (\Throwable) {
+            return null;
+        }
+
+        $value = $rows[0]['estimate'] ?? null;
+
+        return $value === null ? null : (int) $value;
+    }
+
     public function quoteIdentifier(string $identifier): string
     {
         return '['.str_replace(']', ']]', $identifier).']';

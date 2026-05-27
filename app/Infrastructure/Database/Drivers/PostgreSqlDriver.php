@@ -220,6 +220,37 @@ class PostgreSqlDriver extends AbstractDatabaseDriver
     }
 
     /**
+     * Read pg_class.reltuples, the planner's row estimate. Refreshed by
+     * ANALYZE / autovacuum; can be slightly stale but is instant.
+     */
+    public function estimateRowCount(TableIdentifier $table): ?int
+    {
+        $schema = $table->schema ?? $this->defaultSchema();
+
+        try {
+            $rows = $this->fetch(
+                "SELECT reltuples::BIGINT AS estimate
+                 FROM pg_class c
+                 JOIN pg_namespace n ON n.oid = c.relnamespace
+                 WHERE n.nspname = ? AND c.relname = ?",
+                [$schema, $table->name],
+            );
+        } catch (\Throwable) {
+            return null;
+        }
+
+        $value = $rows[0]['estimate'] ?? null;
+
+        // PG returns -1 for tables that have never been analyzed; treat that
+        // as "no estimate available" rather than negative rows.
+        if ($value === null || (int) $value < 0) {
+            return null;
+        }
+
+        return (int) $value;
+    }
+
+    /**
      * @return list<TableIdentifier>
      */
     private function fetchTables(?string $schema, string $type): array
