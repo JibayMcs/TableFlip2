@@ -22,7 +22,28 @@
                     </a>
 
                     <div class="flex items-center gap-4 text-sm text-zinc-600">
-                        {{-- Auth navigation arrives in Phase 2 --}}
+                        @auth('web')
+                            <a href="{{ route('profile') }}" class="hover:text-zinc-900">
+                                {{ auth('web')->user()->name }}
+                            </a>
+                            @role('admin')
+                                <a href="{{ route('admin.users') }}" class="hover:text-zinc-900">Users</a>
+                            @endrole
+                            <form method="POST" action="{{ route('logout') }}" class="inline">
+                                @csrf
+                                <button type="submit" class="hover:text-zinc-900">Sign out</button>
+                            </form>
+                        @elseauth('db_session')
+                            <span class="text-zinc-500 font-mono text-xs">
+                                {{ auth('db_session')->user()->label() }}
+                            </span>
+                            <form method="POST" action="{{ route('logout') }}" class="inline">
+                                @csrf
+                                <button type="submit" class="hover:text-zinc-900">Disconnect</button>
+                            </form>
+                        @else
+                            <a href="{{ route('login') }}" class="hover:text-zinc-900">Sign in</a>
+                        @endauth
                     </div>
                 </nav>
             </header>

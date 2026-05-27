@@ -1,10 +1,20 @@
 <x-layouts.app :title="config('app.name')">
     <div class="space-y-6">
-        <h1 class="text-2xl font-semibold tracking-tight">Welcome to {{ config('app.name') }}</h1>
-
-        <p class="text-zinc-600 max-w-2xl">
-            A self-hosted database studio for MySQL, PostgreSQL, SQLite and SQL Server.
-            Authentication, connection management and the SQL workspace are coming in the next phases.
-        </p>
+        @auth('web')
+            <h1 class="text-2xl font-semibold tracking-tight">
+                Welcome back, {{ auth('web')->user()->name }}.
+            </h1>
+            <p class="text-zinc-600 max-w-2xl">
+                Your saved database connections, the explorer, and the SQL editor are coming in the next phases.
+            </p>
+        @elseauth('db_session')
+            @php($u = auth('db_session')->user())
+            <h1 class="text-2xl font-semibold tracking-tight">
+                Connected directly.
+            </h1>
+            <p class="text-zinc-600">
+                Active connection: <code class="font-mono text-sm">{{ $u->label() }}</code>
+            </p>
+        @endauth
     </div>
 </x-layouts.app>
