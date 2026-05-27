@@ -8,7 +8,7 @@
 
         <title>{{ $title ?? config('app.name') }}</title>
 
-        @vite(['resources/css/app.css', 'resources/js/app.js'])
+        @vite(['resources/css/app.css', 'resources/js/app.ts'])
 
         @livewireStyles
     </head>
@@ -19,7 +19,7 @@
             'min-h-full' => ! $flush,
         ])>
             <header class="shrink-0 bg-white border-b border-zinc-200">
-                <nav class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
+                <nav class="max-w-full mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
                     <a href="{{ url('/') }}" wire:navigate class="flex items-center gap-2 font-semibold text-zinc-900">
                         <h1 class="table-flip-logo"></h1>
                     </a>
@@ -80,6 +80,6 @@
             @endunless
         </div>
 
-        @livewireScripts
+        @livewireScriptConfig
     </body>
 </html>

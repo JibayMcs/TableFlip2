@@ -15,6 +15,18 @@ return [
         'require_db_name' => (bool) env('TABLEFLIP_REQUIRE_DB_NAME', false),
     ],
 
+    'audit' => [
+        // When enabled, every insert/update/delete made through the explorer
+        // is recorded in the `table_operations` table.
+        'enabled' => (bool) env('TABLEFLIP_AUDIT_LOG_ENABLED', true),
+    ],
+
+    'editing' => [
+        // Bulk operations (delete N selected rows) require an extra explicit
+        // confirmation step when more than this many rows are affected.
+        'bulk_confirm_threshold' => (int) env('TABLEFLIP_BULK_OP_CONFIRM_THRESHOLD', 10),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Allowed direct-DB connection scope

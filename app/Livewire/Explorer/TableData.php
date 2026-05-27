@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace App\Livewire\Explorer;
 
 use App\Application\Connections\CurrentConnection;
+use App\Application\Schema\SchemaIntrospectionService;
 use App\Application\Schema\TableDataQueryService;
 use App\Domain\Database\Query\Filter;
 use App\Domain\Database\Query\FilterOperator;
 use App\Domain\Database\Query\Sort;
 use App\Domain\Database\Query\SortDirection;
 use App\Domain\Database\ValueObjects\TableIdentifier;
+use App\Livewire\Explorer\Concerns\HasRowEditing;
 use Illuminate\Contracts\View\View;
 use Livewire\Attributes\On;
 use Livewire\Attributes\Url;
@@ -19,6 +21,8 @@ use Throwable;
 
 class TableData extends Component
 {
+    use HasRowEditing;
+
     public string $database = '';
 
     public ?string $schema = null;
@@ -139,20 +143,17 @@ class TableData extends Component
         $this->page = max(1, $page);
     }
 
-    public function render(CurrentConnection $current, TableDataQueryService $service): View
-    {
+    public function render(
+        CurrentConnection $current,
+        TableDataQueryService $service,
+        SchemaIntrospectionService $schema,
+    ): View {
         $driver = $current->driver();
         if ($driver === null) {
-            return view('livewire.explorer.table-data', [
-                'error' => 'No active connection.',
-                'rows' => [],
-                'columns' => [],
-                'total' => 0,
-                'totalPages' => 1,
-            ]);
+            return view('livewire.explorer.table-data', $this->emptyView('No active connection.'));
         }
 
-        $tableId = new TableIdentifier($this->table, $this->schema, $this->database);
+        $tableId = $this->currentTableIdentifier();
 
         $filters = array_values(array_filter(array_map(
             function (array $f) {
@@ -178,16 +179,20 @@ class TableData extends Component
             $this->sort,
         );
 
+        // Resolve column metadata (types, PK flags). Used by the editing trait
+        // for inline inputs and by the validator for hybrid type checks.
+        try {
+            $detail = $schema->tableDetail($driver, $tableId);
+            $columnDefs = collect($detail['columns'])->keyBy('name')->all();
+            $pkColumns = $this->pkColumnNames($detail['columns']);
+        } catch (Throwable $e) {
+            return view('livewire.explorer.table-data', $this->emptyView($e->getMessage()));
+        }
+
         try {
             $result = $service->query($driver, $tableId, $filters, $sort, $this->page, $this->perPage);
         } catch (Throwable $e) {
-            return view('livewire.explorer.table-data', [
-                'error' => $e->getMessage(),
-                'rows' => [],
-                'columns' => [],
-                'total' => 0,
-                'totalPages' => 1,
-            ]);
+            return view('livewire.explorer.table-data', $this->emptyView($e->getMessage()));
         }
 
         $totalPages = max(1, (int) ceil($result['total'] / $this->perPage));
@@ -196,9 +201,34 @@ class TableData extends Component
             'error' => null,
             'rows' => $result['rows'],
             'columns' => $result['columns'],
+            'columnDefs' => $columnDefs,
+            'pkColumns' => $pkColumns,
+            'hasPrimaryKey' => $pkColumns !== [],
             'total' => $result['total'],
             'totalPages' => $totalPages,
         ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function emptyView(string $error): array
+    {
+        return [
+            'error' => $error,
+            'rows' => [],
+            'columns' => [],
+            'columnDefs' => [],
+            'pkColumns' => [],
+            'hasPrimaryKey' => false,
+            'total' => 0,
+            'totalPages' => 1,
+        ];
+    }
+
+    protected function currentTableIdentifier(): TableIdentifier
+    {
+        return new TableIdentifier($this->table, $this->schema, $this->database);
     }
 
     /**

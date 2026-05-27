@@ -69,7 +69,7 @@ class MySqlDriver extends AbstractDatabaseDriver
                 rawType: $columnType,
                 type: $this->normalizeType($rawType, $columnType),
                 nullable: strtoupper((string) $r['IS_NULLABLE']) === 'YES',
-                default: $r['COLUMN_DEFAULT'],
+                default: $this->normalizeDefault($r['COLUMN_DEFAULT']),
                 autoIncrement: str_contains(strtolower((string) $r['EXTRA']), 'auto_increment'),
                 isPrimaryKey: (string) $r['COLUMN_KEY'] === 'PRI',
                 length: isset($r['CHARACTER_MAXIMUM_LENGTH']) ? (int) $r['CHARACTER_MAXIMUM_LENGTH'] : null,
@@ -79,6 +79,30 @@ class MySqlDriver extends AbstractDatabaseDriver
                 comment: ($c = (string) $r['COLUMN_COMMENT']) !== '' ? $c : null,
             );
         }, $rows));
+    }
+
+    /**
+     * MariaDB 10.2+ returns string defaults wrapped in single quotes
+     * (e.g. `'user'`), and dynamic defaults as function calls (`current_timestamp()`).
+     * Strip the outer quotes for string literals; turn function-call defaults
+     * into NULL so the editing layer falls back to its own NOW() prefill.
+     */
+    private function normalizeDefault(mixed $raw): mixed
+    {
+        if (! is_string($raw)) {
+            return $raw;
+        }
+        if (str_contains($raw, '(') && str_ends_with($raw, ')')) {
+            return null;
+        }
+        if (str_starts_with($raw, "'") && str_ends_with($raw, "'") && strlen($raw) >= 2) {
+            return stripslashes(substr($raw, 1, -1));
+        }
+        if (strcasecmp($raw, 'NULL') === 0) {
+            return null;
+        }
+
+        return $raw;
     }
 
     public function getIndexes(TableIdentifier $table): array
