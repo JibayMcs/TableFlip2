@@ -58,6 +58,24 @@ abstract class AbstractDatabaseDriver implements DatabaseDriverInterface
         ));
     }
 
+    /**
+     * Default: MySQL/PostgreSQL/SQLite-style `LIMIT n OFFSET m`. Drivers that
+     * speak T-SQL override this to emit `OFFSET … FETCH NEXT …`.
+     */
+    public function paginate(string $baseSql, string $orderClause, int $limit, int $offset): string
+    {
+        return $baseSql.$orderClause." LIMIT {$limit} OFFSET {$offset}";
+    }
+
+    /**
+     * Default: no fast-path estimate — drivers override when their catalog
+     * exposes one.
+     */
+    public function estimateRowCount(TableIdentifier $table): ?int
+    {
+        return null;
+    }
+
     public function select(string $sql, array $bindings = []): QueryResult
     {
         $start = microtime(true);

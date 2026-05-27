@@ -206,7 +206,18 @@
     @if ($error)
         <div class="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 font-mono">{{ $error }}</div>
     @else
-        <div class="overflow-x-auto bg-white border border-zinc-200 rounded-md">
+        <div class="overflow-x-auto bg-white border border-zinc-200 rounded-md relative">
+            {{-- Loading veil shown during sort / pagination / filter apply --}}
+            <div wire:loading.flex wire:target="toggleSort,setPage,applyFilters,clearFilters,perPage,updatedPerPage,$set,executeCustomSql,clearCustomSql"
+                class="absolute inset-0 z-30 bg-white/70 backdrop-blur-[1px] items-center justify-center pointer-events-none">
+                <div class="flex items-center gap-2 text-xs text-zinc-700 bg-white border border-zinc-200 rounded-md px-3 py-2 shadow-sm">
+                    <svg class="size-4 animate-spin text-zinc-700" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" stroke-opacity="0.25"/>
+                        <path d="M21 12a9 9 0 00-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+                    </svg>
+                    <span>Loading…</span>
+                </div>
+            </div>
             <table class="w-full text-sm border-collapse">
                 <thead class="text-left text-xs uppercase text-zinc-500 border-b border-zinc-200 bg-zinc-50">
                     <tr>

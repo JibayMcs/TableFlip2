@@ -209,6 +209,18 @@ class SqlServerDriver extends AbstractDatabaseDriver
     }
 
     /**
+     * T-SQL pagination requires `OFFSET n ROWS FETCH NEXT m ROWS ONLY` AND an
+     * ORDER BY. When the caller did not provide one we inject a deterministic
+     * placeholder (`ORDER BY (SELECT NULL)`) which SQL Server accepts.
+     */
+    public function paginate(string $baseSql, string $orderClause, int $limit, int $offset): string
+    {
+        $order = $orderClause !== '' ? $orderClause : ' ORDER BY (SELECT NULL)';
+
+        return $baseSql.$order." OFFSET {$offset} ROWS FETCH NEXT {$limit} ROWS ONLY";
+    }
+
+    /**
      * @return list<TableIdentifier>
      */
     private function fetchTables(?string $schema, string $type): array

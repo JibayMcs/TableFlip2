@@ -38,7 +38,7 @@ class TableDataQueryService
         $perPage = max(1, min(1000, $perPage));
         $offset = ($page - 1) * $perPage;
 
-        $dataSql = "SELECT * FROM {$qualified}{$whereClause}{$orderClause} LIMIT {$perPage} OFFSET {$offset}";
+        $dataSql = $driver->paginate("SELECT * FROM {$qualified}{$whereClause}", $orderClause, $perPage, $offset);
         $countSql = "SELECT COUNT(*) AS c FROM {$qualified}{$whereClause}";
 
         $dataResult = $driver->select($dataSql, $bindings);
@@ -169,7 +169,7 @@ class TableDataQueryService
         $perPage = max(1, $perPage);
         $offset = ($page - 1) * $perPage;
 
-        $sql = "SELECT * FROM {$qualified}{$whereClause}{$orderClause} LIMIT {$perPage} OFFSET {$offset}";
+        $sql = $driver->paginate("SELECT * FROM {$qualified}{$whereClause}", $orderClause, $perPage, $offset);
 
         return [$sql, $bindings];
     }

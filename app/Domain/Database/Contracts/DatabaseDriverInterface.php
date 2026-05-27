@@ -62,6 +62,30 @@ interface DatabaseDriverInterface
     public function qualify(TableIdentifier $table): string;
 
     /**
+     * Best-effort approximate row count, read from the engine's catalog/stats
+     * (sys.dm_db_partition_stats on MSSQL, pg_class.reltuples on PostgreSQL,
+     * information_schema.tables.TABLE_ROWS on MySQL/MariaDB). Returns null when
+     * no estimate is available — the caller is expected to fall back to a
+     * full COUNT(*).
+     *
+     * Estimates can be stale by several minutes; they are meant for UX
+     * affordances ("≈281k rows") on huge tables where COUNT(*) would scan the
+     * whole heap.
+     */
+    public function estimateRowCount(TableIdentifier $table): ?int;
+
+    /**
+     * Append the dialect-correct pagination suffix to a SELECT body.
+     * Each driver decides whether to emit `LIMIT … OFFSET …` (MySQL/PG/SQLite)
+     * or `OFFSET … ROWS FETCH NEXT … ROWS ONLY` (SQL Server, which also
+     * requires an ORDER BY — the driver injects a stable one if missing).
+     *
+     * @param  string  $baseSql      everything before the ORDER BY
+     * @param  string  $orderClause  the ORDER BY clause (with leading space) or empty
+     */
+    public function paginate(string $baseSql, string $orderClause, int $limit, int $offset): string;
+
+    /**
      * @param  array<int|string, mixed>  $bindings
      */
     public function select(string $sql, array $bindings = []): QueryResult;
