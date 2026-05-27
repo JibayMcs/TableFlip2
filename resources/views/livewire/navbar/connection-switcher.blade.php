@@ -1,6 +1,6 @@
 <div>
     @if ($connections->isEmpty())
-        <a href="{{ route('connections.index') }}" class="hover:text-zinc-900">Connections</a>
+        <a href="{{ route('connections.index') }}" wire:navigate class="hover:text-zinc-900">Connections</a>
     @else
         <div x-data="{ open: false }" @click.outside="open = false" @keydown.escape.window="open = false" class="relative">
             <button type="button" @click="open = !open"
@@ -43,7 +43,7 @@
                             Disconnect current
                         </button>
                     @endif
-                    <a href="{{ route('connections.index') }}"
+                    <a href="{{ route('connections.index') }}" wire:navigate
                         class="block px-3 py-2 text-xs text-zinc-700 hover:bg-zinc-50">
                         Manage connections →
                     </a>

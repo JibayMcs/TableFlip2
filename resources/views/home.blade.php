@@ -21,25 +21,30 @@
                                 : ($active->username . '@' . $active->host . ($active->port ? ':' . $active->port : '') . ($active->database ? '/' . $active->database : '')) }}
                         </div>
                     </div>
-                    <span class="text-xs text-emerald-700 inline-flex items-center gap-1">
-                        <span class="size-1.5 rounded-full bg-emerald-500"></span> Active
-                    </span>
+                    <a href="{{ route('explorer') }}" wire:navigate
+                        class="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800">
+                        Open Explorer →
+                    </a>
                 </div>
             @else
                 <p class="text-zinc-600 max-w-2xl">
                     No active connection.
-                    <a href="{{ route('connections.index') }}" class="text-zinc-900 underline">Pick one</a>
+                    <a href="{{ route('connections.index') }}" wire:navigate class="text-zinc-900 underline">Pick one</a>
                     or
-                    <a href="{{ route('connections.create') }}" class="text-zinc-900 underline">create a new one</a>
+                    <a href="{{ route('connections.create') }}" wire:navigate class="text-zinc-900 underline">create a new one</a>
                     to get started.
                 </p>
             @endif
         @elseauth('db_session')
             @php($u = auth('db_session')->user())
             <h1 class="text-2xl font-semibold tracking-tight">Connected directly.</h1>
-            <p class="text-zinc-600">
+            <p class="text-zinc-600 mb-4">
                 Active connection: <code class="font-mono text-sm">{{ $u->label() }}</code>
             </p>
+            <a href="{{ route('explorer') }}" wire:navigate
+                class="inline-block rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800">
+                Open Explorer →
+            </a>
         @endauth
     </div>
 </x-layouts.app>

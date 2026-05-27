@@ -1,7 +1,7 @@
 <div class="space-y-6">
     <div class="flex items-center justify-between">
         <h1 class="text-2xl font-semibold">Connections</h1>
-        <a href="{{ route('connections.create') }}"
+        <a href="{{ route('connections.create') }}" wire:navigate
             class="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800">
             New connection
         </a>
@@ -16,7 +16,7 @@
     @if ($own->isEmpty())
         <div class="rounded-md border border-dashed border-zinc-300 bg-white p-8 text-center text-sm text-zinc-500">
             You don't have any saved connection yet.
-            <a href="{{ route('connections.create') }}" class="text-zinc-900 underline">Create your first one</a>.
+            <a href="{{ route('connections.create') }}" wire:navigate class="text-zinc-900 underline">Create your first one</a>.
         </div>
     @else
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -55,7 +55,7 @@
                                     class="text-xs font-medium text-zinc-900 hover:underline">Use this</button>
                             @endif
                             <span class="ml-auto"></span>
-                            <a href="{{ route('connections.edit', $c) }}" class="text-xs text-zinc-500 hover:text-zinc-900">Edit</a>
+                            <a href="{{ route('connections.edit', $c) }}" wire:navigate class="text-xs text-zinc-500 hover:text-zinc-900">Edit</a>
                             <button wire:click="delete({{ $c->id }})"
                                 wire:confirm="Delete connection “{{ $c->name }}”?"
                                 class="text-xs text-rose-600 hover:text-rose-700">Delete</button>
