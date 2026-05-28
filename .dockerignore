@@ -15,12 +15,11 @@
 node_modules
 vendor
 public/build
-storage/app/*
-!storage/app/public
-storage/framework/cache/data/*
-storage/framework/sessions/*
-storage/framework/views/*
-storage/logs/*
+public/storage
+# Entire storage tree is created on the named volume by entrypoint.
+# Shipping anything here would force Docker to pre-populate the volume
+# from image content and conflict with Dokploy's volume mgmt.
+storage
 bootstrap/cache/*.php
 
 # Local env / secrets

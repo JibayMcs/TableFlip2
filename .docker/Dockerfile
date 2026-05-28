@@ -96,13 +96,12 @@ COPY .docker/php.ini /usr/local/etc/php/conf.d/zz-tableflip.ini
 # FrankenPHP worker config + Caddyfile (HTTP only — TLS handled by Traefik).
 COPY .docker/Caddyfile /etc/caddy/Caddyfile
 
-# Storage dirs created at runtime by entrypoint — we just make sure the
-# parent permissions allow writing.
-RUN mkdir -p storage/framework/{cache,sessions,views} \
-             storage/logs \
-             storage/app/exports \
-             bootstrap/cache && \
-    chown -R www-data:www-data storage bootstrap/cache
+# Storage tree lives entirely on the mounted volume — entrypoint creates
+# the subdirs on first boot. We DON'T pre-create them here : if we did,
+# Docker would pre-populate the named volume from image content, which
+# conflicts with Dokploy's volume management.
+RUN mkdir -p bootstrap/cache && \
+    chown -R www-data:www-data bootstrap/cache
 
 # Entrypoint runs migrations + caches the config/routes/views then hands
 # over to the FrankenPHP server (or queue worker, depending on CMD).

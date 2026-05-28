@@ -13,6 +13,17 @@
 
 set -e
 
+# 0. Create the storage tree on the mounted volume. We don't ship these
+# dirs in the image (would conflict with Dokploy's volume init), so the
+# first boot has to bootstrap them.
+mkdir -p /app/storage/app/exports \
+         /app/storage/app/public \
+         /app/storage/app/private \
+         /app/storage/framework/cache/data \
+         /app/storage/framework/sessions \
+         /app/storage/framework/views \
+         /app/storage/logs
+
 if [ -z "${APP_KEY:-}" ]; then
     echo "FATAL: APP_KEY is not set."
     echo "       Generate one once with `php artisan key:generate --show`"

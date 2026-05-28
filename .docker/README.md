@@ -80,12 +80,14 @@ If you only want PMA-style direct-DB logins (no account system), add
 these to your `.env.docker` :
 
 ```
-TABLEFLIP_AUTH_BREEZE_ENABLED=false
-TABLEFLIP_AUTH_DIRECT_DB_ENABLED=true
-# Optional : lock the form to your usual server so the user only fills
-# username + password (PMA-like).
+AUTH_BREEZE_ENABLED=false
+AUTH_DIRECT_DB_ENABLED=true
+# Optional : lock the form so the user only fills username + password.
+# Each list with EXACTLY ONE value pre-fills + disables that field.
 TABLEFLIP_ALLOWED_DB_HOSTS=mariadb.example.com
 TABLEFLIP_ALLOWED_DB_DRIVERS=mysql
+TABLEFLIP_ALLOWED_DB_NAMES=mydb
+TABLEFLIP_REQUIRE_DB_NAME=true
 ```
 
 The login page will hide the account tab and show only the direct-DB
