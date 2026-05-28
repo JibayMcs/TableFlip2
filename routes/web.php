@@ -1,5 +1,7 @@
 <?php
 
+use App\Livewire\Admin\QueryHistory\Index as AdminQueryHistoryIndex;
+use App\Livewire\Admin\TableOperations\Index as AdminTableOperationsIndex;
 use App\Livewire\Admin\Users\Index as AdminUsersIndex;
 use App\Livewire\Auth\Login;
 use App\Livewire\Auth\Profile;
@@ -62,4 +64,6 @@ Route::middleware('auth:web')->group(function () {
 
 Route::middleware(['auth:web', 'role:admin'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/users', AdminUsersIndex::class)->name('users');
+    Route::get('/audit', AdminTableOperationsIndex::class)->name('audit');
+    Route::get('/history', AdminQueryHistoryIndex::class)->name('history');
 });

@@ -50,6 +50,8 @@
                             </a>
                             @role('admin')
                                 <a href="{{ route('admin.users') }}" wire:navigate class="hover:text-zinc-900 dark:hover:text-zinc-100 data-current:text-zinc-900 dark:data-current:text-zinc-100 data-current:font-medium">{{ __('common.navbar.users') }}</a>
+                                <a href="{{ route('admin.audit') }}" wire:navigate class="hover:text-zinc-900 dark:hover:text-zinc-100 data-current:text-zinc-900 dark:data-current:text-zinc-100 data-current:font-medium">{{ __('admin.navbar.audit') }}</a>
+                                <a href="{{ route('admin.history') }}" wire:navigate class="hover:text-zinc-900 dark:hover:text-zinc-100 data-current:text-zinc-900 dark:data-current:text-zinc-100 data-current:font-medium">{{ __('admin.navbar.history') }}</a>
                             @endrole
                             <form method="POST" action="{{ route('logout') }}" class="inline">
                                 @csrf
