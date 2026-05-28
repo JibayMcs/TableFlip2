@@ -3,7 +3,7 @@
 return [
     'title' => 'Exports',
     'expire_notice' => 'Files expire after :days days.',
-    'empty' => 'No exports yet. Trigger one from the Explorer or the SQL editor.',
+    'empty' => 'No exports yet.',
     'columns' => [
         'file' => 'File',
         'format' => 'Format',

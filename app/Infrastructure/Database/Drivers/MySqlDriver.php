@@ -190,6 +190,53 @@ class MySqlDriver extends AbstractDatabaseDriver
     }
 
     /**
+     * Session-scoped FK toggle. The setting reverts automatically when the
+     * connection is closed, but we restore it explicitly in finally so
+     * subsequent queries on the same pooled connection are unaffected.
+     */
+    public function runWithoutForeignKeyChecks(\Closure $callback): mixed
+    {
+        $this->statement('SET FOREIGN_KEY_CHECKS = 0');
+        try {
+            return $callback();
+        } finally {
+            try {
+                $this->statement('SET FOREIGN_KEY_CHECKS = 1');
+            } catch (\Throwable) {
+                // best-effort restore — the connection may already be in a
+                // weird state if the callback failed mid-statement.
+            }
+        }
+    }
+
+    /**
+     * Bulk per-table size from information_schema (data + index bytes).
+     *
+     * @return array<string, ?int>
+     */
+    public function tableSizes(string $database, ?string $schema = null): array
+    {
+        try {
+            $rows = $this->fetch(
+                'SELECT TABLE_NAME, COALESCE(DATA_LENGTH, 0) + COALESCE(INDEX_LENGTH, 0) AS size_bytes
+                 FROM information_schema.TABLES
+                 WHERE TABLE_SCHEMA = ?',
+                [$database],
+            );
+        } catch (\Throwable) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($rows as $r) {
+            $name = strtolower((string) $r['TABLE_NAME']);
+            $out[$name] = isset($r['size_bytes']) ? (int) $r['size_bytes'] : null;
+        }
+
+        return $out;
+    }
+
+    /**
      * Single-query signature : list of (schema, table count) tuples hashed.
      * Adding/removing a table or a database changes the hash.
      */

@@ -204,6 +204,44 @@ class SqlServerDriver extends AbstractDatabaseDriver
     }
 
     /**
+     * Aggregate (data pages + index pages) × 8KB per table from
+     * sys.dm_db_partition_stats. Works on the connection's CURRENT database
+     * — the caller must have issued a `USE [db]` before (the explorer does
+     * this via SqlExecutor::ensureCurrentDatabase pattern, and the overview
+     * service forwards $database here so we run it ourselves).
+     *
+     * @return array<string, ?int>
+     */
+    public function tableSizes(string $database, ?string $schema = null): array
+    {
+        try {
+            // Switch to the target DB so sys.* views resolve there.
+            $this->statement('USE '.$this->quoteIdentifier($database));
+
+            $rows = $this->fetch(
+                "SELECT t.name,
+                        SUM(CAST(ps.in_row_used_page_count AS BIGINT)
+                          + CAST(ps.lob_used_page_count AS BIGINT)
+                          + CAST(ps.row_overflow_used_page_count AS BIGINT)) * 8 * 1024 AS size_bytes
+                 FROM sys.tables t
+                 JOIN sys.dm_db_partition_stats ps ON ps.object_id = t.object_id
+                 WHERE ps.index_id IN (0, 1)
+                 GROUP BY t.name",
+            );
+        } catch (\Throwable) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($rows as $r) {
+            $name = strtolower((string) $r['name']);
+            $out[$name] = isset($r['size_bytes']) ? (int) $r['size_bytes'] : null;
+        }
+
+        return $out;
+    }
+
+    /**
      * Lightweight signature : hash the list of user databases. Adding /
      * dropping a DB triggers a re-index. Per-DB table changes within
      * existing databases are NOT detected (would require N catalog queries

@@ -24,6 +24,23 @@ class SqliteDriver extends AbstractDatabaseDriver
         return (string) ($row[0]['v'] ?? '');
     }
 
+    /**
+     * SQLite FK enforcement is per-connection via PRAGMA. Toggle it for the
+     * callback's lifetime, then restore.
+     */
+    public function runWithoutForeignKeyChecks(\Closure $callback): mixed
+    {
+        $this->statement('PRAGMA foreign_keys = OFF');
+        try {
+            return $callback();
+        } finally {
+            try {
+                $this->statement('PRAGMA foreign_keys = ON');
+            } catch (\Throwable) {
+            }
+        }
+    }
+
     public function listDatabases(): array
     {
         return [$this->connectionConfig()->database];

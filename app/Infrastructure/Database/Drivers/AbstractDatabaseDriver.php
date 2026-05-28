@@ -86,6 +86,24 @@ abstract class AbstractDatabaseDriver implements DatabaseDriverInterface
     }
 
     /**
+     * Default: no per-table size available (SQLite stores everything in a
+     * single file). Drivers with a catalog expose real numbers.
+     */
+    public function tableSizes(string $database, ?string $schema = null): array
+    {
+        return [];
+    }
+
+    /**
+     * Default : no toggle available — just run the callback. Drivers
+     * override to wrap the call with their dialect-specific switch.
+     */
+    public function runWithoutForeignKeyChecks(\Closure $callback): mixed
+    {
+        return $callback();
+    }
+
+    /**
      * Slow default: iterate listTables + getColumns. Drivers should override
      * to issue a single INFORMATION_SCHEMA query — this is what makes the
      * ERD visualizer usable on remote/slow servers.

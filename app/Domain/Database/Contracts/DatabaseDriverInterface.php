@@ -78,6 +78,14 @@ interface DatabaseDriverInterface
     public function qualify(TableIdentifier $table): string;
 
     /**
+     * On-disk size (data + indexes) of every table/view in a database, in
+     * bytes. Used by the Database Overview panel to show per-table weight.
+     *
+     * @return array<string, ?int>  lowercase table name → bytes (or null when unknown)
+     */
+    public function tableSizes(string $database, ?string $schema = null): array;
+
+    /**
      * Cheap "fingerprint" of the visible schema — used by
      * {@see \App\Application\Schema\SchemaIndexService} to detect when its
      * cached index needs to be refreshed without paying for a full re-walk.
@@ -134,6 +142,18 @@ interface DatabaseDriverInterface
     public function statement(string $sql, array $bindings = []): int;
 
     public function transaction(Closure $callback): mixed;
+
+    /**
+     * Run the callback with foreign-key enforcement temporarily disabled.
+     * Used by TRUNCATE / DROP bulk actions when the user explicitly opts to
+     * bypass FK checks (phpMyAdmin-style).
+     *
+     * Drivers that have no toggle (SQL Server requires per-FK NOCHECK) MUST
+     * still run the callback — they may just leave the checks enforced and
+     * let the error surface. The caller is expected to display the raw
+     * driver error when the operation fails.
+     */
+    public function runWithoutForeignKeyChecks(Closure $callback): mixed;
 
     public function disconnect(): void;
 }

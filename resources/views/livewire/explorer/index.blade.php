@@ -120,19 +120,22 @@
     {{-- Main panel (independent scroll) --}}
     <section class="flex-1 min-w-0 overflow-y-auto">
         <div class="max-w-full mx-auto px-6 py-6">
-            @if (! $selectedTable)
+            @if (! $selectedDatabase)
                 <div class="flex flex-col items-center justify-center text-center py-24 text-zinc-500 dark:text-zinc-400 text-sm">
                     <svg class="size-12 text-zinc-300 dark:text-zinc-700 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/>
                     </svg>
                     {{ __('explorer.pick_database') }}
                 </div>
+            @elseif (! $selectedTable)
+                @include('livewire.explorer._database-overview', ['overview' => $overview])
             @else
                 {{-- Breadcrumbs --}}
                 <nav class="text-xs text-zinc-500 dark:text-zinc-400 mb-4 flex items-center gap-1">
                     <span>{{ $currentLabel }}</span>
                     <span class="text-zinc-300 dark:text-zinc-700">/</span>
-                    <span>{{ $selectedDatabase }}</span>
+                    <button type="button" wire:click="backToOverview"
+                        class="hover:text-zinc-900 dark:hover:text-zinc-100 hover:underline cursor-pointer">{{ $selectedDatabase }}</button>
                     @if ($selectedSchema)
                         <span class="text-zinc-300 dark:text-zinc-700">/</span>
                         <span>{{ $selectedSchema }}</span>
@@ -169,7 +172,8 @@
                     </div>
                 @elseif ($detail)
                     {{-- Row count --}}
-                    <div class="mb-6 inline-flex items-center gap-3 rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-sm">
+                    <div class="mb-6 inline-flex items-center gap-3 rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-sm"
+                        @if ($rowCount === null && ! $rowCountFailed) wire:init="loadRowCount" @endif>
                         <span class="text-zinc-500 dark:text-zinc-400">{{ __('explorer.rows_label') }}</span>
                         @if ($rowCount !== null)
                             <span class="font-mono font-medium">{{ number_format($rowCount) }}</span>
@@ -177,11 +181,13 @@
                             <span class="text-xs text-rose-600"
                                 @if ($rowCountError) x-tooltip.bottom="{{ $rowCountError }}" @endif>{{ __('explorer.unable_to_count') }}</span>
                         @else
-                            <button wire:click="loadRowCount" wire:loading.attr="disabled" wire:target="loadRowCount"
-                                class="text-xs text-zinc-700 dark:text-zinc-300 underline hover:text-zinc-900 dark:text-zinc-100">
-                                <span wire:loading.remove wire:target="loadRowCount">{{ __('explorer.count_rows') }}</span>
-                                <span wire:loading wire:target="loadRowCount">{{ __('explorer.counting') }}</span>
-                            </button>
+                            <span class="text-xs text-zinc-500 dark:text-zinc-400 inline-flex items-center gap-1.5">
+                                <svg class="size-3 animate-spin" viewBox="0 0 24 24" fill="none">
+                                    <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" stroke-opacity="0.25"/>
+                                    <path d="M21 12a9 9 0 00-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+                                </svg>
+                                {{ __('explorer.counting') }}
+                            </span>
                         @endif
                     </div>
 

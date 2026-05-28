@@ -6,8 +6,11 @@ namespace App\Livewire\Explorer;
 
 use App\Application\Connections\ActiveConnectionResolver;
 use App\Application\Connections\CurrentConnection;
+use App\Application\Schema\DatabaseOverviewService;
 use App\Application\Schema\SchemaIndexService;
 use App\Application\Schema\SchemaIntrospectionService;
+use App\Application\Tables\DropTableAction;
+use App\Application\Tables\TruncateTableAction;
 use App\Domain\Database\Exceptions\UnsupportedFeatureException;
 use App\Domain\Database\ValueObjects\TableIdentifier;
 use Illuminate\Contracts\View\View;
@@ -40,6 +43,30 @@ class Index extends Component
     public bool $rowCountFailed = false;
 
     public ?string $rowCountError = null;
+
+    /** Grid or list view for the database overview panel. URL-deeplinked. */
+    #[Url(as: 'view', except: 'grid')]
+    public string $overviewView = 'grid';
+
+    /**
+     * Tables checked for bulk truncate/drop in the overview panel.
+     *
+     * @var list<string>
+     */
+    public array $bulkSelected = [];
+
+    /** When set, the type-to-confirm modal is shown for the requested action. */
+    public ?array $pendingBulkAction = null;
+
+    /**
+     * Toggle in the confirm modal — when false, the action runs with
+     * foreign-key enforcement disabled (phpMyAdmin-style). Default true.
+     */
+    public bool $enforceForeignKeys = true;
+
+    public ?string $overviewError = null;
+
+    public ?string $overviewStatus = null;
 
     public function mount(CurrentConnection $current): void
     {
@@ -76,13 +103,31 @@ class Index extends Component
 
     public function toggleDatabase(string $name): void
     {
-        if (in_array($name, $this->expanded, true)) {
+        // Click on a DB name = expand it (if collapsed) AND select it as
+        // the focus of the main panel, clearing any selected table so the
+        // overview lands. Re-click a DB that's already expanded + selected
+        // collapses it.
+        $wasExpanded = in_array($name, $this->expanded, true);
+        $wasSelected = $this->selectedDatabase === $name && $this->selectedTable === null;
+
+        if ($wasExpanded && $wasSelected) {
             $this->expanded = array_values(array_diff($this->expanded, [$name]));
+            $this->selectedDatabase = null;
 
             return;
         }
 
-        $this->expanded[] = $name;
+        if (! $wasExpanded) {
+            $this->expanded[] = $name;
+        }
+
+        $this->selectedDatabase = $name;
+        $this->selectedSchema = null;
+        $this->selectedTable = null;
+        $this->tab = 'schema';
+        $this->bulkSelected = [];
+        $this->overviewError = null;
+        $this->overviewStatus = null;
     }
 
     public function selectTable(string $database, string $table, ?string $schema = null): void
@@ -114,6 +159,22 @@ class Index extends Component
         $this->tab = in_array($tab, ['schema', 'data'], true) ? $tab : 'schema';
     }
 
+    /**
+     * Clear the table selection so the main panel falls back to the
+     * database overview (kept in sync with the breadcrumb's clickable
+     * database segment).
+     */
+    public function backToOverview(): void
+    {
+        $this->selectedTable = null;
+        $this->selectedSchema = null;
+        $this->tab = 'schema';
+        $this->rowCount = null;
+        $this->rowCountFailed = false;
+        $this->rowCountError = null;
+        $this->dispatch('explorer-table-changed');
+    }
+
     public function loadRowCount(CurrentConnection $current, SchemaIntrospectionService $schema): void
     {
         if ($this->selectedDatabase === null || $this->selectedTable === null) {
@@ -138,6 +199,123 @@ class Index extends Component
         }
     }
 
+    // -- Database overview : bulk actions -------------------------------
+
+    public function setOverviewView(string $mode): void
+    {
+        $this->overviewView = in_array($mode, ['grid', 'list'], true) ? $mode : 'grid';
+    }
+
+    public function toggleBulk(string $tableName): void
+    {
+        if (in_array($tableName, $this->bulkSelected, true)) {
+            $this->bulkSelected = array_values(array_diff($this->bulkSelected, [$tableName]));
+        } else {
+            $this->bulkSelected[] = $tableName;
+        }
+    }
+
+    public function clearBulk(): void
+    {
+        $this->bulkSelected = [];
+    }
+
+    public function requestBulkAction(string $action): void
+    {
+        if (! in_array($action, ['truncate', 'drop'], true) || $this->bulkSelected === []) {
+            return;
+        }
+        $this->pendingBulkAction = [
+            'action' => $action,
+            'tables' => $this->bulkSelected,
+            'count' => count($this->bulkSelected),
+        ];
+    }
+
+    public function cancelBulkAction(): void
+    {
+        $this->pendingBulkAction = null;
+    }
+
+    public function confirmBulkAction(
+        CurrentConnection $current,
+        SchemaIntrospectionService $schema,
+        TruncateTableAction $truncate,
+        DropTableAction $drop,
+        SchemaIndexService $indexer,
+        ActiveConnectionResolver $resolver,
+    ): void {
+        if ($this->pendingBulkAction === null || $this->selectedDatabase === null) {
+            return;
+        }
+
+        $rawDriver = $current->driver();
+        if ($rawDriver === null) {
+            $this->overviewError = 'No active connection.';
+            $this->pendingBulkAction = null;
+
+            return;
+        }
+        $driver = $schema->driverFor($rawDriver, $this->selectedDatabase);
+
+        $action = (string) $this->pendingBulkAction['action'];
+        $tables = (array) $this->pendingBulkAction['tables'];
+        $ok = 0;
+        $errors = [];
+
+        $runBatch = function () use ($driver, $tables, $action, $truncate, $drop, &$ok, &$errors): void {
+            foreach ($tables as $name) {
+                try {
+                    $tableId = new TableIdentifier(
+                        name: (string) $name,
+                        schema: $this->selectedSchema,
+                        database: $this->selectedDatabase,
+                    );
+                    if ($action === 'truncate') {
+                        $truncate->execute($driver, $tableId);
+                    } else {
+                        $drop->execute($driver, $tableId);
+                    }
+                    $ok++;
+                } catch (Throwable $e) {
+                    $errors[] = "{$name}: ".$e->getMessage();
+                }
+            }
+        };
+
+        if ($this->enforceForeignKeys) {
+            $runBatch();
+        } else {
+            $driver->runWithoutForeignKeyChecks($runBatch);
+        }
+
+        $this->bulkSelected = [];
+        $this->pendingBulkAction = null;
+        $verb = $action === 'truncate' ? 'truncated' : 'dropped';
+        $this->overviewStatus = "{$verb} {$ok}/".count($tables);
+        if ($errors !== []) {
+            $this->overviewError = implode("\n", $errors);
+        }
+
+        // Drop = schema shape changed → refresh the search index so the
+        // sidebar reflects reality.
+        if ($action === 'drop') {
+            $connection = $resolver->current();
+            if ($connection !== null) {
+                try {
+                    $indexer->refresh($driver, $connection->poolId());
+                } catch (Throwable) {
+                }
+            }
+        }
+    }
+
+    public function dismissOverviewStatus(): void
+    {
+        $this->overviewError = null;
+        $this->overviewStatus = null;
+    }
+
     public function reindexSchema(
         CurrentConnection $current,
         SchemaIndexService $indexer,
@@ -157,6 +335,7 @@ class Index extends Component
         SchemaIntrospectionService $schema,
         SchemaIndexService $indexer,
         ActiveConnectionResolver $resolver,
+        DatabaseOverviewService $overviewSvc,
     ): View {
         $driver = $current->driver();
         $databases = [];
@@ -164,6 +343,7 @@ class Index extends Component
         $viewsByDb = [];
         $detail = null;
         $searchIndex = [];
+        $overview = null;
 
         if ($driver !== null) {
             $databases = $schema->databases($driver);
@@ -201,6 +381,16 @@ class Index extends Component
                     $detail = ['error' => $e->getMessage()];
                 }
             }
+
+            // Overview = a DB is selected but no specific table — show the
+            // grid/list of tables with rows + size.
+            if ($this->selectedDatabase !== null && $this->selectedTable === null) {
+                try {
+                    $overview = $overviewSvc->overview($driver, $this->selectedDatabase, $this->selectedSchema);
+                } catch (Throwable $e) {
+                    $overview = ['error' => $e->getMessage()];
+                }
+            }
         }
 
         return view('livewire.explorer.index', [
@@ -210,6 +400,7 @@ class Index extends Component
             'viewsByDb' => $viewsByDb,
             'searchIndex' => $searchIndex,
             'detail' => $detail,
+            'overview' => $overview,
             'dialect' => $driver?->getDriverName() ?? 'mysql',
         ]);
     }

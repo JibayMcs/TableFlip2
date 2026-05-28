@@ -220,6 +220,59 @@ class PostgreSqlDriver extends AbstractDatabaseDriver
     }
 
     /**
+     * Setting `session_replication_role = replica` short-circuits ENABLED
+     * triggers — including the implicit RI triggers that enforce FK
+     * constraints. Reverts to `origin` after the callback.
+     *
+     * Requires the session role to be a superuser (or to own the tables);
+     * non-privileged users will hit a 42501 — caller surfaces the raw error.
+     */
+    public function runWithoutForeignKeyChecks(\Closure $callback): mixed
+    {
+        $this->statement("SET session_replication_role = replica");
+        try {
+            return $callback();
+        } finally {
+            try {
+                $this->statement("SET session_replication_role = origin");
+            } catch (\Throwable) {
+            }
+        }
+    }
+
+    /**
+     * Per-relation size in bytes (heap + indexes + TOAST), via
+     * pg_total_relation_size. Scoped to the requested schema (defaults to
+     * the connection's search_path head).
+     *
+     * @return array<string, ?int>
+     */
+    public function tableSizes(string $database, ?string $schema = null): array
+    {
+        $schema ??= $this->defaultSchema();
+
+        try {
+            $rows = $this->fetch(
+                "SELECT c.relname, pg_total_relation_size(c.oid)::BIGINT AS size_bytes
+                 FROM pg_class c
+                 JOIN pg_namespace n ON n.oid = c.relnamespace
+                 WHERE n.nspname = ? AND c.relkind IN ('r', 'v', 'm', 'p')",
+                [$schema],
+            );
+        } catch (\Throwable) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($rows as $r) {
+            $name = strtolower((string) $r['relname']);
+            $out[$name] = isset($r['size_bytes']) ? (int) $r['size_bytes'] : null;
+        }
+
+        return $out;
+    }
+
+    /**
      * Signature on the connected database only — PG can't query other DBs
      * without reconnecting. The schema index service runs against the pool
      * key (one per saved connection), so signing the connected DB's schema
