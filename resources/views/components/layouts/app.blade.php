@@ -42,6 +42,7 @@
                             @endif
 
                             <a href="{{ route('exports.index') }}" wire:navigate class="hover:text-zinc-900 dark:hover:text-zinc-100 data-current:text-zinc-900 dark:data-current:text-zinc-100 data-current:font-medium">{{ __('common.navbar.exports') }}</a>
+                            <a href="{{ route('docs') }}" wire:navigate class="hover:text-zinc-900 dark:hover:text-zinc-100 data-current:text-zinc-900 dark:data-current:text-zinc-100 data-current:font-medium">{{ __('common.navbar.docs') }}</a>
 
                             <livewire:navbar.connection-switcher />
 
@@ -61,6 +62,7 @@
                             <a href="{{ route('explorer') }}" wire:navigate class="hover:text-zinc-900 dark:hover:text-zinc-100 data-current:text-zinc-900 dark:data-current:text-zinc-100 data-current:font-medium">{{ __('common.navbar.explorer') }}</a>
                             <a href="{{ route('sql') }}" wire:navigate class="hover:text-zinc-900 dark:hover:text-zinc-100 data-current:text-zinc-900 dark:data-current:text-zinc-100 data-current:font-medium">{{ __('common.navbar.sql') }}</a>
                             <a href="{{ route('visualizer') }}" wire:navigate class="hover:text-zinc-900 dark:hover:text-zinc-100 data-current:text-zinc-900 dark:data-current:text-zinc-100 data-current:font-medium">{{ __('common.navbar.diagram') }}</a>
+                            <a href="{{ route('docs') }}" wire:navigate class="hover:text-zinc-900 dark:hover:text-zinc-100 data-current:text-zinc-900 dark:data-current:text-zinc-100 data-current:font-medium">{{ __('common.navbar.docs') }}</a>
                             <span class="text-zinc-500 dark:text-zinc-400 dark:text-zinc-400 font-mono text-xs">
                                 {{ auth('db_session')->user()->label() }}
                             </span>

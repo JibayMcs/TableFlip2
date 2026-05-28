@@ -7,6 +7,7 @@ use App\Livewire\Auth\Login;
 use App\Livewire\Auth\Profile;
 use App\Livewire\Connections\Form as ConnectionForm;
 use App\Livewire\Connections\Index as ConnectionsIndex;
+use App\Livewire\Docs\Index as DocsIndex;
 use App\Livewire\Explorer\Index as ExplorerIndex;
 use App\Livewire\Exports\DatabaseExport;
 use App\Livewire\Exports\Index as ExportsIndex;
@@ -37,6 +38,14 @@ Route::middleware('auth.tableflip')->group(function () {
     Route::get('/explorer', ExplorerIndex::class)->name('explorer');
     Route::get('/sql', SqlEditor::class)->name('sql');
     Route::get('/visualizer', VisualizerIndex::class)->name('visualizer');
+
+    // Markdown docs. `slug` is everything after /docs/, including
+    // slashes — page hierarchies like `connections/mysql` resolve to
+    // `docs/user/<locale>/connections/mysql.md`.
+    Route::get('/docs', DocsIndex::class)->name('docs');
+    Route::get('/docs/{slug}', DocsIndex::class)
+        ->where('slug', '[a-z0-9\-/]+')
+        ->name('docs.show');
 });
 
 Route::middleware('auth:web')->group(function () {

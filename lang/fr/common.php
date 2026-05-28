@@ -39,6 +39,7 @@ return [
         'diagram' => 'Diagramme',
         'exports' => 'Exports',
         'users' => 'Utilisateurs',
+        'docs' => 'Docs',
         'profile' => 'Profil',
     ],
 ];

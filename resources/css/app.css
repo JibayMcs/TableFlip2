@@ -67,3 +67,163 @@ input[type='number'] {
     from { background-position: 0% 0; }
     to   { background-position: 200% 0; }
 }
+
+/* Docs prose : minimal but readable typography for Markdown-rendered
+   pages. We avoid @tailwindcss/typography to keep the bundle lean — we
+   only need a dozen rules. */
+.tf-docs-prose h1 {
+    font-size: 1.875rem;
+    font-weight: 600;
+    line-height: 1.2;
+    margin: 0 0 1.5rem;
+    color: var(--color-zinc-900);
+}
+.tf-docs-prose h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin: 2.5rem 0 1rem;
+    color: var(--color-zinc-900);
+    scroll-margin-top: 1rem;
+}
+.tf-docs-prose h3 {
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin: 2rem 0 0.75rem;
+    color: var(--color-zinc-900);
+    scroll-margin-top: 1rem;
+}
+.tf-docs-prose p {
+    margin: 0 0 1rem;
+    line-height: 1.65;
+    color: var(--color-zinc-700);
+}
+.tf-docs-prose a {
+    color: var(--color-blue-600);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+.tf-docs-prose ul, .tf-docs-prose ol {
+    margin: 0 0 1rem 1.25rem;
+    line-height: 1.65;
+    color: var(--color-zinc-700);
+}
+.tf-docs-prose ul { list-style: disc; }
+.tf-docs-prose ol { list-style: decimal; }
+.tf-docs-prose li { margin: 0.25rem 0; }
+.tf-docs-prose code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.875em;
+    padding: 0.1rem 0.35rem;
+    border-radius: 0.25rem;
+    background: var(--color-zinc-100);
+    color: var(--color-zinc-800);
+}
+.tf-docs-prose pre {
+    margin: 0 0 1rem;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    background: var(--color-zinc-50);
+    border: 1px solid var(--color-zinc-200);
+    overflow-x: auto;
+    font-size: 0.85rem;
+    line-height: 1.55;
+}
+.tf-docs-prose pre code {
+    background: none;
+    padding: 0;
+    color: var(--color-zinc-800);
+}
+.tf-docs-prose blockquote {
+    border-left: 3px solid var(--color-zinc-300);
+    padding: 0.25rem 1rem;
+    margin: 0 0 1rem;
+    color: var(--color-zinc-600);
+    font-style: italic;
+}
+.tf-docs-prose table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0 0 1rem;
+    font-size: 0.9rem;
+}
+.tf-docs-prose th, .tf-docs-prose td {
+    border: 1px solid var(--color-zinc-200);
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+}
+.tf-docs-prose th {
+    background: var(--color-zinc-50);
+    font-weight: 600;
+}
+.tf-docs-prose hr {
+    margin: 2rem 0;
+    border: 0;
+    border-top: 1px solid var(--color-zinc-200);
+}
+.tf-heading-permalink {
+    opacity: 0;
+    margin-left: 0.4rem;
+    color: var(--color-zinc-400);
+    text-decoration: none;
+    font-weight: 400;
+    transition: opacity 120ms;
+}
+.tf-docs-prose h1:hover .tf-heading-permalink,
+.tf-docs-prose h2:hover .tf-heading-permalink,
+.tf-docs-prose h3:hover .tf-heading-permalink {
+    opacity: 1;
+}
+
+/* ToC right rail */
+.tf-docs-toc ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.tf-docs-toc li {
+    margin: 0.25rem 0;
+}
+.tf-docs-toc a {
+    display: block;
+    padding: 0.15rem 0;
+    color: var(--color-zinc-600);
+    text-decoration: none;
+}
+.tf-docs-toc a:hover {
+    color: var(--color-zinc-900);
+}
+.tf-docs-toc ul ul {
+    margin-left: 0.75rem;
+    border-left: 1px solid var(--color-zinc-200);
+    padding-left: 0.5rem;
+}
+
+/* Dark mode overrides for docs */
+.dark .tf-docs-prose h1,
+.dark .tf-docs-prose h2,
+.dark .tf-docs-prose h3 { color: var(--color-zinc-100); }
+.dark .tf-docs-prose p,
+.dark .tf-docs-prose ul,
+.dark .tf-docs-prose ol { color: var(--color-zinc-300); }
+.dark .tf-docs-prose code {
+    background: var(--color-zinc-800);
+    color: var(--color-zinc-200);
+}
+.dark .tf-docs-prose pre {
+    background: var(--color-zinc-950);
+    border-color: var(--color-zinc-800);
+}
+.dark .tf-docs-prose pre code { color: var(--color-zinc-200); }
+.dark .tf-docs-prose blockquote {
+    border-left-color: var(--color-zinc-700);
+    color: var(--color-zinc-400);
+}
+.dark .tf-docs-prose th { background: var(--color-zinc-900); }
+.dark .tf-docs-prose th,
+.dark .tf-docs-prose td { border-color: var(--color-zinc-800); }
+.dark .tf-docs-prose hr { border-top-color: var(--color-zinc-800); }
+.dark .tf-docs-prose a { color: var(--color-blue-400); }
+.dark .tf-docs-toc a { color: var(--color-zinc-400); }
+.dark .tf-docs-toc a:hover { color: var(--color-zinc-100); }
+.dark .tf-docs-toc ul ul { border-left-color: var(--color-zinc-800); }
+.dark .tf-heading-permalink { color: var(--color-zinc-600); }
