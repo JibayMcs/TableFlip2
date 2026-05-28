@@ -1,0 +1,44 @@
+# Keep build context small + avoid leaking dev artefacts in the image.
+
+.git
+.github
+.gitignore
+.gitattributes
+.editorconfig
+
+# IDE / editor
+.idea
+.vscode
+.fleet
+
+# Dev artefacts
+node_modules
+vendor
+public/build
+storage/app/*
+!storage/app/public
+storage/framework/cache/data/*
+storage/framework/sessions/*
+storage/framework/views/*
+storage/logs/*
+bootstrap/cache/*.php
+
+# Local env / secrets
+.env
+.env.*
+!.docker/.env.docker.example
+
+# Original code (reference only, not part of the runtime)
+docs/original_code
+
+# Tests, dev docs
+tests
+phpunit.xml
+phpstan.neon
+phpstan.dist.neon
+psalm.xml
+.phpunit.cache
+
+# Misc
+*.log
+.DS_Store

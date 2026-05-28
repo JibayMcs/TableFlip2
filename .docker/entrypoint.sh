@@ -1,0 +1,61 @@
+#!/bin/sh
+# TableFlip — container entrypoint.
+#
+# Boot order :
+#   1. Fail fast if APP_KEY is missing (we never auto-generate one in
+#      production — losing it would invalidate every encrypted DB password).
+#   2. Wait for the configured database to accept connections (best-effort,
+#      30s timeout — if it never comes up we let Laravel surface the error).
+#   3. Cache config / routes / events so the first request is fast.
+#   4. Run pending migrations.
+#   5. Hand over to whatever CMD was passed (web server / queue worker /
+#      scheduler — we don't make assumptions).
+
+set -e
+
+if [ -z "${APP_KEY:-}" ]; then
+    echo "FATAL: APP_KEY is not set."
+    echo "       Generate one once with `php artisan key:generate --show`"
+    echo "       and inject it as an environment variable (don't lose it !)."
+    exit 1
+fi
+
+# 2. Best-effort DB wait — only when DB_HOST / DB_PORT are set.
+if [ -n "${DB_HOST:-}" ] && [ -n "${DB_PORT:-}" ]; then
+    echo "Waiting for ${DB_HOST}:${DB_PORT} (up to 30s)…"
+    i=0
+    while ! nc -z "$DB_HOST" "$DB_PORT" 2>/dev/null; do
+        i=$((i + 1))
+        if [ "$i" -ge 30 ]; then
+            echo "WARN: ${DB_HOST}:${DB_PORT} did not respond in 30s — continuing anyway."
+            break
+        fi
+        sleep 1
+    done
+fi
+
+# 3. Cache. We *clear* first so previous-image caches don't poison the new one.
+php artisan config:clear  >/dev/null 2>&1 || true
+php artisan route:clear   >/dev/null 2>&1 || true
+php artisan view:clear    >/dev/null 2>&1 || true
+php artisan event:clear   >/dev/null 2>&1 || true
+
+php artisan config:cache  >/dev/null
+php artisan route:cache   >/dev/null
+php artisan view:cache    >/dev/null
+php artisan event:cache   >/dev/null
+
+# 4. Migrate. Set MIGRATE_ON_BOOT=0 to skip (handy if you orchestrate
+# migrations from a separate one-shot job).
+if [ "${MIGRATE_ON_BOOT:-1}" = "1" ]; then
+    php artisan migrate --force --no-interaction
+fi
+
+# Storage symlink — idempotent, so safe to run every boot.
+php artisan storage:link >/dev/null 2>&1 || true
+
+# Make sure storage / cache stay writable when Docker mounts a volume over
+# them (volume created with root ownership).
+chown -R www-data:www-data /app/storage /app/bootstrap/cache 2>/dev/null || true
+
+exec "$@"

@@ -1,0 +1,132 @@
+# TableFlip — production compose for Dokploy / Traefik setups.
+#
+# What's NOT here on purpose :
+#   - No nginx : Traefik (or any upstream proxy) handles TLS + routing
+#   - No DB    : "BYODB" — point DB_HOST/DB_DATABASE at your own MariaDB
+#     or PostgreSQL instance. The container ships pdo_mysql + pdo_pgsql +
+#     pdo_dblib (MSSQL) so it can connect to anything Laravel supports.
+#
+# To run it under Dokploy : import this file as a "Compose" application,
+# fill the env vars from .env.docker.example, and add Traefik labels via
+# the Dokploy UI (host / certResolver / etc.).
+#
+# To run it locally (testing the image) :
+#   cp .docker/.env.docker.example .env.docker
+#   docker compose -f .docker/docker-compose.yml --env-file .env.docker up
+
+services:
+  app:
+    image: tableflip:latest
+    build:
+      context: ..
+      dockerfile: .docker/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_KEY: ${APP_KEY}
+      APP_URL: ${APP_URL}
+      APP_TIMEZONE: ${APP_TIMEZONE:-UTC}
+      LOG_CHANNEL: stderr
+      DB_CONNECTION: ${DB_CONNECTION:-mysql}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_DATABASE: ${DB_DATABASE}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      CACHE_DRIVER: redis
+      SESSION_DRIVER: database
+      QUEUE_CONNECTION: redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      MAIL_MAILER: ${MAIL_MAILER:-log}
+      TABLEFLIP_EXPORTS_DISK: local
+      TABLEFLIP_EXPORTS_RETENTION_DAYS: ${TABLEFLIP_EXPORTS_RETENTION_DAYS:-7}
+    volumes:
+      - app-storage:/app/storage
+    expose:
+      - "8080"
+    # Sample Traefik labels — keep them here for reference, Dokploy will
+    # generally manage these for you via the UI.
+    # labels:
+    #   - "traefik.enable=true"
+    #   - "traefik.http.routers.tableflip.rule=Host(`tableflip.example.com`)"
+    #   - "traefik.http.routers.tableflip.entrypoints=websecure"
+    #   - "traefik.http.routers.tableflip.tls.certresolver=letsencrypt"
+    #   - "traefik.http.services.tableflip.loadbalancer.server.port=8080"
+
+  worker:
+    image: tableflip:latest
+    build:
+      context: ..
+      dockerfile: .docker/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: ["php", "artisan", "queue:work", "--tries=1", "--timeout=600", "--sleep=3"]
+    environment:
+      <<: &app-env
+        APP_ENV: production
+        APP_DEBUG: "false"
+        APP_KEY: ${APP_KEY}
+        APP_URL: ${APP_URL}
+        APP_TIMEZONE: ${APP_TIMEZONE:-UTC}
+        LOG_CHANNEL: stderr
+        DB_CONNECTION: ${DB_CONNECTION:-mysql}
+        DB_HOST: ${DB_HOST}
+        DB_PORT: ${DB_PORT:-3306}
+        DB_DATABASE: ${DB_DATABASE}
+        DB_USERNAME: ${DB_USERNAME}
+        DB_PASSWORD: ${DB_PASSWORD}
+        CACHE_DRIVER: redis
+        SESSION_DRIVER: database
+        QUEUE_CONNECTION: redis
+        REDIS_HOST: redis
+        REDIS_PORT: 6379
+        REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      # Worker doesn't migrate again — that's the web container's job.
+      MIGRATE_ON_BOOT: "0"
+    volumes:
+      - app-storage:/app/storage
+
+  scheduler:
+    image: tableflip:latest
+    build:
+      context: ..
+      dockerfile: .docker/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: ["php", "artisan", "schedule:work"]
+    environment:
+      <<: *app-env
+      MIGRATE_ON_BOOT: "0"
+    volumes:
+      - app-storage:/app/storage
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      - "redis-server"
+      - "--appendonly"
+      - "yes"
+      - "--requirepass"
+      - "${REDIS_PASSWORD:-}"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - redis-data:/data
+
+volumes:
+  app-storage:
+  redis-data:
