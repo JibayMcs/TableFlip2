@@ -3,7 +3,7 @@
 return [
     'title' => 'Exports',
     'expire_notice' => 'Les fichiers expirent après :days jours.',
-    'empty' => 'Aucun export pour le moment.',
+    'empty' => 'Aucun export pour le moment. Déclenchez-en un depuis l\'explorateur ou l\'éditeur SQL.',
     'columns' => [
         'file' => 'Fichier',
         'format' => 'Format',
