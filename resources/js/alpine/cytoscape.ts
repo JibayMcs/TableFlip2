@@ -262,7 +262,9 @@ export function registerCytoscape(alpine: Alpine): void {
                         elements: [...data.nodes, ...data.edges],
                         style: styleSheet(),
                         layout: layoutFor(layoutName),
-                        wheelSensitivity: 0.3,
+                        // Default is 1, prior value 0.3 felt sluggish.
+                        // 0.6 reaches ~2× zoom in ~3 wheel notches.
+                        wheelSensitivity: 2,
                         minZoom: 0.05,
                         maxZoom: 4,
                     });
