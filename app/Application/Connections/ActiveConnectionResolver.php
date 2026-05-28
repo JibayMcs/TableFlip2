@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Application\Connections;
 
+use App\Application\Schema\SchemaIndexService;
 use App\Domain\Database\Contracts\DatabaseDriverInterface;
 use App\Infrastructure\Database\DatabaseConnectionManager;
 use App\Models\DatabaseConnection;
 use Illuminate\Contracts\Session\Session;
+use Throwable;
 
 class ActiveConnectionResolver
 {
@@ -16,6 +18,7 @@ class ActiveConnectionResolver
     public function __construct(
         private readonly Session $session,
         private readonly DatabaseConnectionManager $manager,
+        private readonly SchemaIndexService $schemaIndex,
     ) {}
 
     public function currentId(): ?int
@@ -42,6 +45,18 @@ class ActiveConnectionResolver
 
         $this->session->put(self::SESSION_KEY, $connection->id);
         $connection->forceFill(['last_used_at' => now()])->save();
+
+        // Prime the sidebar search index eagerly so the first interaction
+        // with the search field is instant. Best-effort — a failure here
+        // shouldn't block the connection switch.
+        try {
+            $driver = $this->driver();
+            if ($driver !== null) {
+                $this->schemaIndex->refresh($driver, $connection->poolId());
+            }
+        } catch (Throwable) {
+            // ignored — index will be lazy-built on first sidebar render.
+        }
     }
 
     public function clear(): void

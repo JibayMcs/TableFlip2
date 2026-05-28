@@ -190,6 +190,29 @@ class MySqlDriver extends AbstractDatabaseDriver
     }
 
     /**
+     * Single-query signature : list of (schema, table count) tuples hashed.
+     * Adding/removing a table or a database changes the hash.
+     */
+    public function schemaSignature(): ?string
+    {
+        try {
+            $rows = $this->fetch(
+                'SELECT TABLE_SCHEMA, COUNT(*) AS cnt
+                 FROM information_schema.TABLES
+                 WHERE TABLE_SCHEMA NOT IN ("information_schema","mysql","performance_schema","sys")
+                 GROUP BY TABLE_SCHEMA
+                 ORDER BY TABLE_SCHEMA',
+            );
+        } catch (\Throwable) {
+            return null;
+        }
+
+        $pairs = array_map(static fn ($r) => $r['TABLE_SCHEMA'].':'.$r['cnt'], $rows);
+
+        return md5(implode('|', $pairs));
+    }
+
+    /**
      * Bulk columns of a whole DB in 1 query (vs N for getColumns loop).
      * Used by the ERD visualizer to avoid timeouts on large schemas.
      */

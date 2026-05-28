@@ -77,6 +77,15 @@ abstract class AbstractDatabaseDriver implements DatabaseDriverInterface
     }
 
     /**
+     * Default: no cheap signature — index cache will only refresh on
+     * explicit user request. MySQL/PG/MSSQL drivers override.
+     */
+    public function schemaSignature(): ?string
+    {
+        return null;
+    }
+
+    /**
      * Slow default: iterate listTables + getColumns. Drivers should override
      * to issue a single INFORMATION_SCHEMA query — this is what makes the
      * ERD visualizer usable on remote/slow servers.

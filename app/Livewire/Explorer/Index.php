@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Livewire\Explorer;
 
+use App\Application\Connections\ActiveConnectionResolver;
 use App\Application\Connections\CurrentConnection;
+use App\Application\Schema\SchemaIndexService;
 use App\Application\Schema\SchemaIntrospectionService;
 use App\Domain\Database\Exceptions\UnsupportedFeatureException;
 use App\Domain\Database\ValueObjects\TableIdentifier;
@@ -136,16 +138,47 @@ class Index extends Component
         }
     }
 
-    public function render(CurrentConnection $current, SchemaIntrospectionService $schema): View
-    {
+    public function reindexSchema(
+        CurrentConnection $current,
+        SchemaIndexService $indexer,
+        ActiveConnectionResolver $resolver,
+    ): void {
+        $driver = $current->driver();
+        $connection = $resolver->current();
+        if ($driver === null || $connection === null) {
+            return;
+        }
+
+        $indexer->refresh($driver, $connection->poolId());
+    }
+
+    public function render(
+        CurrentConnection $current,
+        SchemaIntrospectionService $schema,
+        SchemaIndexService $indexer,
+        ActiveConnectionResolver $resolver,
+    ): View {
         $driver = $current->driver();
         $databases = [];
         $tablesByDb = [];
         $viewsByDb = [];
         $detail = null;
+        $searchIndex = [];
 
         if ($driver !== null) {
             $databases = $schema->databases($driver);
+
+            // Cross-database index for the sidebar search — cached forever,
+            // refreshed automatically when the engine's schema signature
+            // changes, or manually via the Reindex button.
+            $connection = $resolver->current();
+            if ($connection !== null) {
+                try {
+                    $searchIndex = $indexer->index($driver, $connection->poolId());
+                } catch (Throwable) {
+                    $searchIndex = [];
+                }
+            }
 
             foreach ($this->expanded as $db) {
                 try {
@@ -175,6 +208,7 @@ class Index extends Component
             'databases' => $databases,
             'tablesByDb' => $tablesByDb,
             'viewsByDb' => $viewsByDb,
+            'searchIndex' => $searchIndex,
             'detail' => $detail,
             'dialect' => $driver?->getDriverName() ?? 'mysql',
         ]);

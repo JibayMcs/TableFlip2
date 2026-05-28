@@ -3,11 +3,12 @@
 return [
     'sidebar' => [
         'filter_placeholder' => 'Filtrer bases & tables…',
-        'expand_hint' => 'Les tables hors d\'une base ouverte ne sont pas indexées — ouvrir la base d\'abord.',
         'empty' => 'vide',
         'no_databases' => 'Aucune base visible.',
+        'reindex_tooltip' => 'Réindexer le schéma (rafraîchir l\'index de recherche)',
+        'unloaded_match_tooltip' => 'Des résultats correspondent dans cette base — la déplier pour les voir',
     ],
-    'pick_database' => 'Choisis une base dans la sidebar pour commencer.',
+    'pick_database' => 'Choisissez une base dans la sidebar pour commencer.',
     'tabs' => [
         'schema' => 'Schéma',
         'data' => 'Données',
@@ -31,12 +32,6 @@ return [
         'references' => 'Référence',
         'on_update' => 'On update',
         'on_delete' => 'On delete',
-    ],
-    'badges' => [
-        'pk' => 'PK',
-        'ai' => 'AI',
-        'primary' => 'PRIMARY',
-        'unique' => 'UNIQUE',
     ],
     'enum_prefix' => 'enum :',
 ];

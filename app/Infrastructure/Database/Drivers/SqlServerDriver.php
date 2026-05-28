@@ -204,6 +204,26 @@ class SqlServerDriver extends AbstractDatabaseDriver
     }
 
     /**
+     * Lightweight signature : hash the list of user databases. Adding /
+     * dropping a DB triggers a re-index. Per-DB table changes within
+     * existing databases are NOT detected (would require N catalog queries
+     * across DBs) — the user can hit "Reindex" manually after a schema
+     * change inside a DB.
+     */
+    public function schemaSignature(): ?string
+    {
+        try {
+            $rows = $this->fetch(
+                'SELECT name FROM sys.databases WHERE database_id > 4 ORDER BY name',
+            );
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return md5(implode('|', array_map(static fn ($r) => (string) $r['name'], $rows)));
+    }
+
+    /**
      * Read the heap/clustered-index row count from sys.dm_db_partition_stats.
      * index_id IN (0, 1) covers heap and clustered indexes — summing them
      * across partitions gives the table's effective row count. This is

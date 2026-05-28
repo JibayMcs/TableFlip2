@@ -3,9 +3,10 @@
 return [
     'sidebar' => [
         'filter_placeholder' => 'Filter databases & tables…',
-        'expand_hint' => 'Tables outside an expanded database are not searchable — expand the DB first.',
         'empty' => 'empty',
         'no_databases' => 'No databases visible.',
+        'reindex_tooltip' => 'Reindex schema (refresh the search index)',
+        'unloaded_match_tooltip' => 'Matches found inside this database — expand to see them',
     ],
     'pick_database' => 'Pick a database in the sidebar to start exploring.',
     'tabs' => [
@@ -31,12 +32,6 @@ return [
         'references' => 'References',
         'on_update' => 'On update',
         'on_delete' => 'On delete',
-    ],
-    'badges' => [
-        'pk' => 'PK',
-        'ai' => 'AI',
-        'primary' => 'PRIMARY',
-        'unique' => 'UNIQUE',
     ],
     'enum_prefix' => 'enum:',
 ];

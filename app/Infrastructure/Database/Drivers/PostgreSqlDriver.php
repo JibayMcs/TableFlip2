@@ -220,6 +220,33 @@ class PostgreSqlDriver extends AbstractDatabaseDriver
     }
 
     /**
+     * Signature on the connected database only — PG can't query other DBs
+     * without reconnecting. The schema index service runs against the pool
+     * key (one per saved connection), so signing the connected DB's schema
+     * is enough to detect table-level changes that the user is likely to
+     * notice. New databases on the cluster require manual reindex.
+     */
+    public function schemaSignature(): ?string
+    {
+        try {
+            $rows = $this->fetch(
+                "SELECT schemaname, COUNT(*) AS cnt
+                 FROM pg_tables
+                 WHERE schemaname NOT IN ('pg_catalog','information_schema')
+                 GROUP BY schemaname
+                 ORDER BY schemaname",
+            );
+            $dbRow = $this->fetch('SELECT current_database() AS db');
+        } catch (\Throwable) {
+            return null;
+        }
+
+        $pairs = array_map(static fn ($r) => $r['schemaname'].':'.$r['cnt'], $rows);
+
+        return md5(($dbRow[0]['db'] ?? '').'|'.implode('|', $pairs));
+    }
+
+    /**
      * Bulk columns of a database in 1 query — used by ErdGenerator to dodge
      * N+1 on big schemas. Falls back to default per-table loop if the
      * caller doesn't pass a schema (search_path is per-connection on PG).

@@ -78,6 +78,18 @@ interface DatabaseDriverInterface
     public function qualify(TableIdentifier $table): string;
 
     /**
+     * Cheap "fingerprint" of the visible schema — used by
+     * {@see \App\Application\Schema\SchemaIndexService} to detect when its
+     * cached index needs to be refreshed without paying for a full re-walk.
+     *
+     * Implementations SHOULD return a string that changes if a database is
+     * added/removed or if a table is added/removed/renamed. Returning null
+     * means "no cheap fingerprint available" — the index will only be
+     * refreshed on explicit user request.
+     */
+    public function schemaSignature(): ?string;
+
+    /**
      * Best-effort approximate row count, read from the engine's catalog/stats
      * (sys.dm_db_partition_stats on MSSQL, pg_class.reltuples on PostgreSQL,
      * information_schema.tables.TABLE_ROWS on MySQL/MariaDB). Returns null when
