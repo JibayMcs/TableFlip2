@@ -50,9 +50,11 @@ RUN apk add --no-cache \
         oniguruma \
         libpq \
         libzip \
+        sqlite-libs \
         unixodbc \
         freetds \
         gettext \
+        netcat-openbsd \
         && \
     apk add --no-cache --virtual .build-deps \
         $PHPIZE_DEPS \
@@ -60,6 +62,7 @@ RUN apk add --no-cache \
         oniguruma-dev \
         libpq-dev \
         libzip-dev \
+        sqlite-dev \
         unixodbc-dev \
         freetds-dev \
         && \
@@ -72,6 +75,7 @@ RUN apk add --no-cache \
         pdo_mysql \
         pdo_pgsql \
         pdo_dblib \
+        pdo_sqlite \
         opcache \
         bcmath \
         zip \

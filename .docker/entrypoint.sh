@@ -20,14 +20,44 @@ if [ -z "${APP_KEY:-}" ]; then
     exit 1
 fi
 
-# 2. Best-effort DB wait — only when DB_HOST / DB_PORT are set.
-if [ -n "${DB_HOST:-}" ] && [ -n "${DB_PORT:-}" ]; then
+# 2a. SQLite : make sure the file exists before migrations run. Laravel
+# refuses to open a missing SQLite file even in "create on connect" mode.
+if [ "${DB_CONNECTION:-sqlite}" = "sqlite" ] && [ -n "${DB_DATABASE:-}" ]; then
+    sqlite_file="${DB_DATABASE}"
+    sqlite_dir="$(dirname "$sqlite_file")"
+    mkdir -p "$sqlite_dir"
+    if [ ! -f "$sqlite_file" ]; then
+        echo "Creating SQLite storage database at ${sqlite_file}"
+        touch "$sqlite_file"
+    fi
+    chown www-data:www-data "$sqlite_file" 2>/dev/null || true
+    chmod 0664 "$sqlite_file" 2>/dev/null || true
+fi
+
+# 2b. Remote DB wait — only when DB_HOST / DB_PORT are set (mysql / pgsql /
+# sqlsrv). SQLite skips this entirely.
+if [ "${DB_CONNECTION:-sqlite}" != "sqlite" ] && [ -n "${DB_HOST:-}" ] && [ -n "${DB_PORT:-}" ]; then
     echo "Waiting for ${DB_HOST}:${DB_PORT} (up to 30s)…"
     i=0
     while ! nc -z "$DB_HOST" "$DB_PORT" 2>/dev/null; do
         i=$((i + 1))
         if [ "$i" -ge 30 ]; then
             echo "WARN: ${DB_HOST}:${DB_PORT} did not respond in 30s — continuing anyway."
+            break
+        fi
+        sleep 1
+    done
+fi
+
+# 2c. Redis wait — sessions / queue / cache live there, so it's worth
+# making sure it's up before we start serving requests.
+if [ -n "${REDIS_HOST:-}" ]; then
+    echo "Waiting for ${REDIS_HOST}:${REDIS_PORT:-6379} (up to 30s)…"
+    i=0
+    while ! nc -z "$REDIS_HOST" "${REDIS_PORT:-6379}" 2>/dev/null; do
+        i=$((i + 1))
+        if [ "$i" -ge 30 ]; then
+            echo "WARN: ${REDIS_HOST}:${REDIS_PORT:-6379} did not respond in 30s — continuing anyway."
             break
         fi
         sleep 1
