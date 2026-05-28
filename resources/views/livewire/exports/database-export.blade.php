@@ -26,15 +26,19 @@
 
     <form wire:submit="start" class="space-y-5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-6">
         {{-- Méthode d'exportation --}}
-        <fieldset class="border border-zinc-200 dark:border-zinc-800 rounded-md p-3">
+        <fieldset class="border border-zinc-200 dark:border-zinc-800 rounded-md p-3 space-y-1">
             <legend class="px-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">{{ __('exports.database.method') }}</legend>
-            <label class="flex items-center gap-2 text-sm">
-                <input type="radio" checked disabled class="text-zinc-900" />
+            <label class="flex items-center gap-2 text-sm cursor-pointer">
+                <input type="radio" value="quick"
+                    @checked($mode === 'quick')
+                    wire:click="setMode('quick')" />
                 <span class="text-zinc-900 dark:text-zinc-100">{{ __('exports.database.method_quick') }}</span>
             </label>
-            <label class="flex items-center gap-2 text-sm text-zinc-400 dark:text-zinc-500 mt-1">
-                <input type="radio" disabled />
-                <span>{{ __('exports.database.method_custom') }} <span class="text-[10px] uppercase">{{ __('common.coming_soon') }}</span></span>
+            <label class="flex items-center gap-2 text-sm cursor-pointer">
+                <input type="radio" value="custom"
+                    @checked($mode === 'custom')
+                    wire:click="setMode('custom')" />
+                <span class="text-zinc-900 dark:text-zinc-100">{{ __('exports.database.method_custom') }}</span>
             </label>
         </fieldset>
 
@@ -60,6 +64,82 @@
             </select>
             <p class="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">{{ __('exports.database.format_sql_dump_hint') }}</p>
         </fieldset>
+
+        {{-- Tables grid (custom mode) --}}
+        @if ($mode === 'custom')
+            <fieldset class="border border-zinc-200 dark:border-zinc-800 rounded-md p-3 space-y-2">
+                <legend class="px-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">{{ __('exports.database.tables') }}</legend>
+
+                @if (count($tableSelection) === 0)
+                    <p class="text-xs text-zinc-500 dark:text-zinc-400 italic">{{ __('exports.database.tables_empty_hint') }}</p>
+                @else
+                    <div class="flex items-center gap-2 text-xs pb-2 border-b border-zinc-100 dark:border-zinc-800">
+                        <span class="text-zinc-500 dark:text-zinc-400 mr-2">{{ __('exports.database.bulk') }}</span>
+                        <button type="button" wire:click="bulkSelect('both', true)" class="px-2 py-0.5 rounded border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800">{{ __('exports.database.select_all') }}</button>
+                        <button type="button" wire:click="bulkSelect('both', false)" class="px-2 py-0.5 rounded border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800">{{ __('exports.database.deselect_all') }}</button>
+                        <span class="ml-2 text-zinc-300 dark:text-zinc-700">|</span>
+                        <button type="button" wire:click="bulkSelect('structure', true)" class="px-2 py-0.5 rounded border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800">{{ __('exports.database.structure_all') }}</button>
+                        <button type="button" wire:click="bulkSelect('data', true)" class="px-2 py-0.5 rounded border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800">{{ __('exports.database.data_all') }}</button>
+                    </div>
+
+                    <div class="max-h-72 overflow-y-auto -mx-1">
+                        <table class="w-full text-xs">
+                            <thead class="text-left text-[10px] uppercase text-zinc-500 dark:text-zinc-400">
+                                <tr>
+                                    <th class="px-2 py-1.5">{{ __('explorer.table_headers.name') }}</th>
+                                    <th class="px-2 py-1.5 text-center w-24">{{ __('exports.database.col_structure') }}</th>
+                                    <th class="px-2 py-1.5 text-center w-24">{{ __('exports.database.col_data') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($tableSelection as $name => $flags)
+                                    <tr class="border-t border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
+                                        <td class="px-2 py-1 font-mono">{{ $name }}</td>
+                                        <td class="px-2 py-1 text-center">
+                                            <input type="checkbox" wire:model="tableSelection.{{ $name }}.structure" class="rounded border-zinc-300 dark:border-zinc-700" />
+                                        </td>
+                                        <td class="px-2 py-1 text-center">
+                                            <input type="checkbox" wire:model="tableSelection.{{ $name }}.data" class="rounded border-zinc-300 dark:border-zinc-700" />
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                @endif
+            </fieldset>
+
+            {{-- Options spécifiques SQL --}}
+            <fieldset class="border border-zinc-200 dark:border-zinc-800 rounded-md p-3 space-y-2">
+                <legend class="px-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">{{ __('exports.database.sql_options') }}</legend>
+
+                <label class="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+                    <input type="checkbox" wire:model="optAddDrop" class="rounded border-zinc-300 dark:border-zinc-700" />
+                    {{ __('exports.database.opt_add_drop') }}
+                </label>
+                <label class="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+                    <input type="checkbox" wire:model="optIfNotExists" class="rounded border-zinc-300 dark:border-zinc-700" />
+                    {{ __('exports.database.opt_if_not_exists') }}
+                </label>
+                <label class="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+                    <input type="checkbox" wire:model="optTransactional" class="rounded border-zinc-300 dark:border-zinc-700" />
+                    {{ __('exports.database.opt_transactional') }}
+                </label>
+                <label class="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+                    <input type="checkbox" wire:model="optDisableFk" class="rounded border-zinc-300 dark:border-zinc-700" />
+                    {{ __('exports.database.opt_disable_fk') }}
+                </label>
+                <label class="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+                    <input type="checkbox" wire:model="optAddHeader" class="rounded border-zinc-300 dark:border-zinc-700" />
+                    {{ __('exports.database.opt_add_header') }}
+                </label>
+                <div class="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300 pt-1">
+                    <label for="rows-per-insert">{{ __('exports.database.opt_rows_per_insert') }}</label>
+                    <input id="rows-per-insert" type="number" min="1" max="10000" wire:model="optRowsPerInsert"
+                        class="w-24 rounded border border-zinc-300 dark:border-zinc-700 px-2 py-1 text-sm" />
+                </div>
+            </fieldset>
+        @endif
 
         {{-- Sortie --}}
         <fieldset class="border border-zinc-200 dark:border-zinc-800 rounded-md p-3 space-y-3">

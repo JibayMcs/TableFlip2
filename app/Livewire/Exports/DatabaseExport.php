@@ -48,7 +48,85 @@ class DatabaseExport extends Component
     /** Compression mode : none | gzip | zip. */
     public string $compression = 'none';
 
+    /** 'quick' or 'custom' — drives the visible form sections. */
+    #[Url(as: 'mode', except: 'quick')]
+    public string $mode = 'quick';
+
+    // -- Per-table picker state (custom mode) ---------------------------
+
+    /**
+     * Decisions per table : ['<name>' => ['structure' => bool, 'data' => bool]].
+     * Primed when the user switches to custom mode the first time.
+     *
+     * @var array<string, array{structure: bool, data: bool}>
+     */
+    public array $tableSelection = [];
+
+    public bool $selectionPrimed = false;
+
+    // -- SQL-specific options (custom mode) -----------------------------
+
+    public bool $optAddDrop = true;
+
+    public bool $optIfNotExists = false;
+
+    public bool $optTransactional = true;
+
+    public bool $optDisableFk = true;
+
+    public bool $optAddHeader = true;
+
+    public int $optRowsPerInsert = 100;
+
     public ?string $error = null;
+
+    /**
+     * Switch between Quick and Custom modes. On the first transition to
+     * Custom we prime the selection from the database overview so the user
+     * sees every table pre-checked (like phpMyAdmin).
+     */
+    public function setMode(
+        string $mode,
+        CurrentConnection $current,
+        DatabaseOverviewService $overview,
+    ): void {
+        $this->mode = in_array($mode, ['quick', 'custom'], true) ? $mode : 'quick';
+
+        if ($this->mode === 'custom' && ! $this->selectionPrimed && $this->database !== null) {
+            $driver = $current->driver();
+            if ($driver !== null) {
+                try {
+                    $payload = $overview->overview($driver, $this->database, $this->schema);
+                    $primed = [];
+                    foreach ($payload['tables'] as $t) {
+                        $primed[$t['name']] = [
+                            'structure' => true,
+                            'data' => $t['type'] === 'table',
+                        ];
+                    }
+                    $this->tableSelection = $primed;
+                    $this->selectionPrimed = true;
+                } catch (Throwable $e) {
+                    $this->error = $e->getMessage();
+                }
+            }
+        }
+    }
+
+    public function bulkSelect(string $what, bool $value): void
+    {
+        if (! in_array($what, ['structure', 'data', 'both'], true)) {
+            return;
+        }
+        foreach ($this->tableSelection as $name => &$flags) {
+            if ($what === 'both' || $what === 'structure') {
+                $flags['structure'] = $value;
+            }
+            if ($what === 'both' || $what === 'data') {
+                $flags['data'] = $value;
+            }
+        }
+    }
 
     public function mount(CurrentConnection $current): void
     {
@@ -102,18 +180,37 @@ class DatabaseExport extends Component
             return;
         }
 
-        $tables = array_map(
-            static fn (array $t) => [
-                'name' => $t['name'],
-                'schema' => $t['schema'] ?? null,
-                'structure' => true,
-                'data' => $t['type'] === 'table',
-            ],
-            $payload['tables'],
-        );
+        if ($this->mode === 'custom' && $this->tableSelection !== []) {
+            $tables = [];
+            foreach ($payload['tables'] as $t) {
+                $sel = $this->tableSelection[$t['name']] ?? null;
+                if ($sel === null) {
+                    continue;
+                }
+                if (! $sel['structure'] && ! $sel['data']) {
+                    continue;
+                }
+                $tables[] = [
+                    'name' => $t['name'],
+                    'schema' => $t['schema'] ?? null,
+                    'structure' => (bool) $sel['structure'],
+                    'data' => (bool) $sel['data'],
+                ];
+            }
+        } else {
+            $tables = array_map(
+                static fn (array $t) => [
+                    'name' => $t['name'],
+                    'schema' => $t['schema'] ?? null,
+                    'structure' => true,
+                    'data' => $t['type'] === 'table',
+                ],
+                $payload['tables'],
+            );
+        }
 
         if ($tables === []) {
-            $this->error = __('exports.database.empty_database');
+            $this->error = __('exports.database.empty_selection');
 
             return;
         }
@@ -131,15 +228,25 @@ class DatabaseExport extends Component
             'connection_id' => $connection->id,
             'database_name' => $this->database,
             'format' => 'sql_dump',
-            'options' => [
-                'add_drop' => true,
-                'if_not_exists' => false,
-                'transactional' => true,
-                'disable_fk' => true,
-                'add_header' => true,
-                'rows_per_insert' => 100,
-                'compression' => $this->compression,
-            ],
+            'options' => $this->mode === 'custom'
+                ? [
+                    'add_drop' => $this->optAddDrop,
+                    'if_not_exists' => $this->optIfNotExists,
+                    'transactional' => $this->optTransactional,
+                    'disable_fk' => $this->optDisableFk,
+                    'add_header' => $this->optAddHeader,
+                    'rows_per_insert' => max(1, $this->optRowsPerInsert),
+                    'compression' => $this->compression,
+                ]
+                : [
+                    'add_drop' => true,
+                    'if_not_exists' => false,
+                    'transactional' => true,
+                    'disable_fk' => true,
+                    'add_header' => true,
+                    'rows_per_insert' => 100,
+                    'compression' => $this->compression,
+                ],
             'source_kind' => 'database',
             'source_payload' => [
                 'database' => $this->database,
