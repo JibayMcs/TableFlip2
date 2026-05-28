@@ -20,16 +20,6 @@ use Livewire\Component;
 #[Layout('components.layouts.app')]
 class Login extends Component
 {
-    public string $mode = 'account';
-
-    // Account mode
-    public string $email = '';
-
-    public string $password = '';
-
-    public bool $remember = false;
-
-    // Direct mode
     public string $driver = 'mysql';
 
     public string $host = '127.0.0.1';
@@ -40,15 +30,10 @@ class Login extends Component
 
     public string $username = '';
 
-    public string $directPassword = '';
+    public string $password = '';
 
-    // UI state derived from config/policy
     /** @var list<string> */
     public array $driverChoices = [];
-
-    public bool $breezeEnabled = true;
-
-    public bool $directEnabled = true;
 
     public bool $hostLocked = false;
 
@@ -56,14 +41,11 @@ class Login extends Component
 
     public bool $databaseLocked = false;
 
-    /** True when the user MUST provide a database (locked by policy, env, or SQLite). */
+    /** True when the user must provide a database (locked by policy, env, or SQLite). */
     public bool $databaseRequired = false;
 
     public function mount(): void
     {
-        $this->breezeEnabled = (bool) config('tableflip.auth.breeze_enabled');
-        $this->directEnabled = (bool) config('tableflip.auth.direct_db_enabled');
-
         $policy = AllowedConnectionPolicy::fromConfig();
         $factory = app(DatabaseDriverFactory::class);
 
@@ -86,6 +68,8 @@ class Login extends Component
             $this->database = $policy->allowedDatabases[0];
         }
 
+        // Pre-fill from the last successful login on this browser. Username
+        // and host save a keystroke ; the password is never persisted.
         $cookie = request()->cookie('tableflip_last_direct');
         if (is_string($cookie)) {
             $data = json_decode($cookie, true) ?: [];
@@ -100,13 +84,6 @@ class Login extends Component
             }
             $this->username = (string) ($data['username'] ?? '');
             $this->port = isset($data['port']) ? (int) $data['port'] : null;
-        }
-
-        if (! $this->breezeEnabled) {
-            $this->mode = 'direct';
-        }
-        if (! $this->directEnabled) {
-            $this->mode = 'account';
         }
 
         $this->refreshDatabaseRequirement();
@@ -126,50 +103,43 @@ class Login extends Component
             || (bool) config('tableflip.auth.require_db_name');
     }
 
-    public function loginAccount(): void
+    /**
+     * Fill the form with a saved bookmark's decrypted credentials and,
+     * when `autoSubmit` is true, immediately attempt the login. Saves the
+     * caller a roundtrip + a click compared to set-then-submit.
+     *
+     * @param  array{driver?: string, host?: string, port?: int|null, database?: string, username?: string, password?: string, autoSubmit?: bool}  $data
+     */
+    public function fillAndLogin(array $data, DirectDbAuthenticator $authenticator): void
     {
-        if (! $this->breezeEnabled) {
-            throw ValidationException::withMessages(['email' => __('Account login is disabled.')]);
+        if (isset($data['driver']) && in_array($data['driver'], $this->driverChoices, true)) {
+            $this->driver = (string) $data['driver'];
+        }
+        if (isset($data['host'])) {
+            $this->host = (string) $data['host'];
+        }
+        $this->port = isset($data['port']) && $data['port'] !== null ? (int) $data['port'] : null;
+        if (isset($data['database'])) {
+            $this->database = (string) $data['database'];
+        }
+        if (isset($data['username'])) {
+            $this->username = (string) $data['username'];
+        }
+        if (isset($data['password'])) {
+            $this->password = (string) $data['password'];
         }
 
-        $this->validate([
-            'email' => ['required', 'email'],
-            'password' => ['required'],
-        ]);
+        $this->refreshDatabaseRequirement();
 
-        // Rate-limit by IP + email so credential stuffing is throttled.
-        // 5 failed attempts per minute → 1 min lockout; the limiter key is
-        // hit() on failure and cleared on success.
-        $rateKey = 'login.account|'.request()->ip().'|'.strtolower($this->email);
-        if (RateLimiter::tooManyAttempts($rateKey, 5)) {
-            $seconds = RateLimiter::availableIn($rateKey);
-            throw ValidationException::withMessages([
-                'email' => __('Too many login attempts. Try again in :sec seconds.', ['sec' => $seconds]),
-            ]);
+        if (! ($data['autoSubmit'] ?? false)) {
+            return;
         }
 
-        $ok = Auth::guard('web')->attempt(
-            ['email' => $this->email, 'password' => $this->password, 'is_active' => true],
-            $this->remember,
-        );
-
-        if (! $ok) {
-            RateLimiter::hit($rateKey, 60);
-            throw ValidationException::withMessages(['email' => __('These credentials do not match our records.')]);
-        }
-
-        RateLimiter::clear($rateKey);
-        request()->session()->regenerate();
-
-        $this->redirect('/', navigate: true);
+        $this->login($authenticator);
     }
 
-    public function loginDirect(DirectDbAuthenticator $authenticator): void
+    public function login(DirectDbAuthenticator $authenticator): void
     {
-        if (! $this->directEnabled) {
-            throw ValidationException::withMessages(['driver' => __('Direct database login is disabled.')]);
-        }
-
         $rules = [
             'driver' => ['required', 'in:'.implode(',', $this->driverChoices)],
             'database' => [$this->databaseRequired ? 'required' : 'nullable', 'string'],
@@ -179,20 +149,21 @@ class Login extends Component
             $rules += [
                 'host' => ['required', 'string'],
                 'username' => ['required', 'string'],
-                'directPassword' => ['required', 'string'],
+                'password' => ['required', 'string'],
             ];
         }
 
         $this->validate($rules);
 
-        // Throttle direct-DB attempts the same way as account login — the
-        // back-end DB will lock the user out faster than us but this saves
-        // round-trips and load on the target server.
-        $rateKey = 'login.direct|'.request()->ip().'|'.$this->host.'|'.$this->username;
+        // Throttle attempts the same way the back-end will, with a smaller
+        // window. Five failures per minute on the (IP, host, username)
+        // triple is enough to catch a brute force without affecting a user
+        // mistyping their password.
+        $rateKey = 'login|'.request()->ip().'|'.$this->host.'|'.$this->username;
         if (RateLimiter::tooManyAttempts($rateKey, 5)) {
             $seconds = RateLimiter::availableIn($rateKey);
             throw ValidationException::withMessages([
-                'directPassword' => __('Too many login attempts. Try again in :sec seconds.', ['sec' => $seconds]),
+                'password' => __('Too many login attempts. Try again in :sec seconds.', ['sec' => $seconds]),
             ]);
         }
 
@@ -202,14 +173,14 @@ class Login extends Component
             port: $this->port ?? $this->defaultPort($this->driver),
             database: $this->database,
             username: $this->username,
-            password: $this->directPassword,
+            password: $this->password,
         );
 
         try {
             $user = $authenticator->authenticate($creds);
         } catch (AuthenticationException $e) {
             RateLimiter::hit($rateKey, 60);
-            throw ValidationException::withMessages(['directPassword' => $e->getMessage()]);
+            throw ValidationException::withMessages(['password' => $e->getMessage()]);
         }
 
         RateLimiter::clear($rateKey);

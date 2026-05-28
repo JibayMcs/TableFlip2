@@ -407,7 +407,6 @@ class TableData extends Component
             $this->table => array_keys($columnDefs),
         ];
         $dialectName = $driver->getDriverName();
-        $exportConnectionId = $current->connectionId();
         $exportSourcePayload = $this->buildExportSourcePayload();
 
         // ── Custom SQL scratch pad takes priority over the natural query ──
@@ -435,7 +434,6 @@ class TableData extends Component
                 'totalPages' => 1,
                 'autocompleteSchema' => $autocompleteSchema,
                 'dialect' => $dialectName,
-                'exportConnectionId' => $exportConnectionId,
                 'exportSourceKind' => 'raw_sql',
                 'exportSourcePayload' => ['sql' => $this->customSql],
             ]);
@@ -521,7 +519,6 @@ class TableData extends Component
             'totalPages' => $totalPages,
             'autocompleteSchema' => $autocompleteSchema,
             'dialect' => $dialectName,
-            'exportConnectionId' => $exportConnectionId,
             'exportSourceKind' => 'table',
             'exportSourcePayload' => $exportSourcePayload,
         ]);
@@ -587,7 +584,6 @@ class TableData extends Component
             'totalPages' => 1,
             'autocompleteSchema' => [],
             'dialect' => 'mysql',
-            'exportConnectionId' => null,
             'exportSourceKind' => 'table',
             'exportSourcePayload' => [],
         ];

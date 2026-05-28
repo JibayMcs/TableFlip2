@@ -51,7 +51,7 @@ class Index extends Component
     public function mount(CurrentConnection $current): void
     {
         if ($current->driver() === null) {
-            $this->redirect(route('connections.index'), navigate: true);
+            $this->redirect(route('login'), navigate: true);
 
             return;
         }

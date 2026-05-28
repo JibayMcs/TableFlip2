@@ -1,9 +1,12 @@
 @props(['title' => null, 'flush' => false])
 @php
-    // Server-rendered theme class avoids any FOUC. Falls back to light for
-    // anonymous visitors (login screen). The user picks light/dark in the
-    // profile page.
-    $themePref = auth('web')->user()?->theme ?? 'light';
+    // Server-rendered theme class avoids any FOUC. Reads from a cookie set
+    // by the theme toggle. Falls back to light when the cookie is missing
+    // (anonymous visitors, first visit).
+    $themePref = $_COOKIE['tableflip_theme'] ?? 'light';
+    if (! in_array($themePref, ['light', 'dark'], true)) {
+        $themePref = 'light';
+    }
     $isDark = $themePref === 'dark';
 @endphp
 <!DOCTYPE html>
@@ -33,37 +36,58 @@
                         <h1 class="table-flip-logo"></h1>
                     </a>
 
-                    <div class="flex items-center gap-4 text-sm text-zinc-600 dark:text-zinc-400 dark:text-zinc-400">
-                        @auth('web')
-                            @if (session('tableflip.active_connection_id'))
-                                <a href="{{ route('explorer') }}" wire:navigate class="hover:text-zinc-900 dark:hover:text-zinc-100 data-current:text-zinc-900 dark:data-current:text-zinc-100 data-current:font-medium">{{ __('common.navbar.explorer') }}</a>
-                                <a href="{{ route('sql') }}" wire:navigate class="hover:text-zinc-900 dark:hover:text-zinc-100 data-current:text-zinc-900 dark:data-current:text-zinc-100 data-current:font-medium">{{ __('common.navbar.sql') }}</a>
-                                <a href="{{ route('visualizer') }}" wire:navigate class="hover:text-zinc-900 dark:hover:text-zinc-100 data-current:text-zinc-900 dark:data-current:text-zinc-100 data-current:font-medium">{{ __('common.navbar.diagram') }}</a>
-                            @endif
-
-                            <a href="{{ route('exports.index') }}" wire:navigate class="hover:text-zinc-900 dark:hover:text-zinc-100 data-current:text-zinc-900 dark:data-current:text-zinc-100 data-current:font-medium">{{ __('common.navbar.exports') }}</a>
-                            <a href="{{ route('docs') }}" wire:navigate class="hover:text-zinc-900 dark:hover:text-zinc-100 data-current:text-zinc-900 dark:data-current:text-zinc-100 data-current:font-medium">{{ __('common.navbar.docs') }}</a>
-
-                            <livewire:navbar.connection-switcher />
-
-                            <a href="{{ route('profile') }}" wire:navigate class="hover:text-zinc-900 dark:hover:text-zinc-100 data-current:text-zinc-900 dark:data-current:text-zinc-100 data-current:font-medium">
-                                {{ auth('web')->user()->name }}
-                            </a>
-                            @role('admin')
-                                <a href="{{ route('admin.users') }}" wire:navigate class="hover:text-zinc-900 dark:hover:text-zinc-100 data-current:text-zinc-900 dark:data-current:text-zinc-100 data-current:font-medium">{{ __('common.navbar.users') }}</a>
-                                <a href="{{ route('admin.audit') }}" wire:navigate class="hover:text-zinc-900 dark:hover:text-zinc-100 data-current:text-zinc-900 dark:data-current:text-zinc-100 data-current:font-medium">{{ __('admin.navbar.audit') }}</a>
-                                <a href="{{ route('admin.history') }}" wire:navigate class="hover:text-zinc-900 dark:hover:text-zinc-100 data-current:text-zinc-900 dark:data-current:text-zinc-100 data-current:font-medium">{{ __('admin.navbar.history') }}</a>
-                            @endrole
-                            <form method="POST" action="{{ route('logout') }}" class="inline">
-                                @csrf
-                                <button type="submit" class="hover:text-zinc-900 dark:hover:text-zinc-100">{{ __('common.sign_out') }}</button>
-                            </form>
-                        @elseauth('db_session')
+                    <div class="flex items-center gap-4 text-sm text-zinc-600 dark:text-zinc-400">
+                        @auth('db_session')
                             <a href="{{ route('explorer') }}" wire:navigate class="hover:text-zinc-900 dark:hover:text-zinc-100 data-current:text-zinc-900 dark:data-current:text-zinc-100 data-current:font-medium">{{ __('common.navbar.explorer') }}</a>
                             <a href="{{ route('sql') }}" wire:navigate class="hover:text-zinc-900 dark:hover:text-zinc-100 data-current:text-zinc-900 dark:data-current:text-zinc-100 data-current:font-medium">{{ __('common.navbar.sql') }}</a>
                             <a href="{{ route('visualizer') }}" wire:navigate class="hover:text-zinc-900 dark:hover:text-zinc-100 data-current:text-zinc-900 dark:data-current:text-zinc-100 data-current:font-medium">{{ __('common.navbar.diagram') }}</a>
+                            <a href="{{ route('exports.index') }}" wire:navigate class="hover:text-zinc-900 dark:hover:text-zinc-100 data-current:text-zinc-900 dark:data-current:text-zinc-100 data-current:font-medium">{{ __('common.navbar.exports') }}</a>
                             <a href="{{ route('docs') }}" wire:navigate class="hover:text-zinc-900 dark:hover:text-zinc-100 data-current:text-zinc-900 dark:data-current:text-zinc-100 data-current:font-medium">{{ __('common.navbar.docs') }}</a>
-                            <span class="text-zinc-500 dark:text-zinc-400 dark:text-zinc-400 font-mono text-xs">
+                            <a href="{{ route('admin.audit') }}" wire:navigate class="hover:text-zinc-900 dark:hover:text-zinc-100 data-current:text-zinc-900 dark:data-current:text-zinc-100 data-current:font-medium">{{ __('admin.navbar.audit') }}</a>
+                            <a href="{{ route('admin.history') }}" wire:navigate class="hover:text-zinc-900 dark:hover:text-zinc-100 data-current:text-zinc-900 dark:data-current:text-zinc-100 data-current:font-medium">{{ __('admin.navbar.history') }}</a>
+
+                            {{-- Switch-connection dropdown : reads the public list from
+                                localStorage. The label and accent colour stay in clear so we
+                                can display them while the store is locked ; everything else
+                                (driver / host / username / password) is encrypted and only
+                                visible after the master password has been entered on /login. --}}
+                            <div x-data="{
+                                    open: false,
+                                    colorClasses: {
+                                        zinc: 'bg-zinc-400',
+                                        blue: 'bg-blue-500',
+                                        emerald: 'bg-emerald-500',
+                                        amber: 'bg-amber-500',
+                                        rose: 'bg-rose-500',
+                                        violet: 'bg-violet-500',
+                                        cyan: 'bg-cyan-500',
+                                        pink: 'bg-pink-500',
+                                    },
+                                }" x-bookmarks class="relative">
+                                <button type="button" @click="open = ! open" :disabled="bookmarks.publicList.length === 0"
+                                    class="hover:text-zinc-900 dark:hover:text-zinc-100 disabled:opacity-40 disabled:cursor-not-allowed">
+                                    {{ __('bookmarks.navbar.switch') }}
+                                </button>
+                                <div x-show="open" x-cloak @click.away="open = false"
+                                    class="absolute right-0 mt-2 w-72 rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-lg z-50 py-1">
+                                    <template x-if="bookmarks.publicList.length === 0">
+                                        <p class="px-4 py-3 text-xs text-zinc-500 dark:text-zinc-400 italic">{{ __('bookmarks.navbar.no_saved') }}</p>
+                                    </template>
+                                    <template x-for="b in bookmarks.publicList" :key="b.id">
+                                        <form method="POST" action="{{ route('logout') }}" class="block">
+                                            @csrf
+                                            <input type="hidden" name="bookmark" :value="b.id">
+                                            <button type="submit"
+                                                class="w-full flex items-center gap-2 text-left px-4 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-800 border-b border-zinc-100 dark:border-zinc-800 last:border-0">
+                                                <span class="size-2.5 rounded-full shrink-0" :class="colorClasses[b.color] || colorClasses.zinc"></span>
+                                                <span class="text-sm text-zinc-900 dark:text-zinc-100 truncate" x-text="b.label"></span>
+                                            </button>
+                                        </form>
+                                    </template>
+                                </div>
+                            </div>
+
+                            <span class="text-zinc-500 dark:text-zinc-400 font-mono text-xs">
                                 {{ auth('db_session')->user()->label() }}
                             </span>
                             <form method="POST" action="{{ route('logout') }}" class="inline">

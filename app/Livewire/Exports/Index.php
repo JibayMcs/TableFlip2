@@ -24,7 +24,7 @@ class Index extends Component
         if ($export === null) {
             return;
         }
-        if ($export->user_identifier !== (string) Auth::guard('web')->id()) {
+        if ($export->user_identifier !== (string) Auth::guard('db_session')->id()) {
             return;
         }
 
@@ -38,11 +38,11 @@ class Index extends Component
 
     public function render(): View
     {
-        $userId = (string) Auth::guard('web')->id();
+        $userId = (string) Auth::guard('db_session')->id();
         $ttl = (int) config('tableflip.exports.download_url_ttl_minutes', 30);
 
         $exports = Export::query()
-            ->where('user_kind', 'web')
+            ->where('user_kind', 'direct_db')
             ->where('user_identifier', $userId)
             ->orderByDesc('created_at')
             ->paginate(25);

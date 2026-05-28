@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Livewire\Exports;
 
-use App\Application\Connections\ActiveConnectionResolver;
 use App\Application\Connections\CurrentConnection;
 use App\Application\Export\ExportFilename;
 use App\Application\Schema\DatabaseOverviewService;
@@ -130,12 +129,8 @@ class DatabaseExport extends Component
 
     public function mount(CurrentConnection $current): void
     {
-        if (! Auth::guard('web')->check()) {
-            // Direct-DB sessions can't dispatch jobs (worker has no creds).
-            $this->error = __('exports.database.no_breeze');
-        }
         if ($current->driver() === null) {
-            $this->redirect(route('connections.index'), navigate: true);
+            $this->redirect(route('login'), navigate: true);
 
             return;
         }
@@ -146,19 +141,12 @@ class DatabaseExport extends Component
 
     public function start(
         CurrentConnection $current,
-        ActiveConnectionResolver $resolver,
         DatabaseOverviewService $overview,
         SchemaIntrospectionService $schema,
     ): void {
         $this->error = null;
-        if (! Auth::guard('web')->check()) {
-            $this->error = __('exports.database.no_breeze');
-
-            return;
-        }
-        $connection = $resolver->current();
         $driver = $current->driver();
-        if ($connection === null || $driver === null) {
+        if ($driver === null) {
             $this->error = __('exports.database.no_connection');
 
             return;
@@ -218,14 +206,13 @@ class DatabaseExport extends Component
         $base = ExportFilename::resolve($this->filenameTemplate, [
             'database' => $this->database,
             'driver' => $driver->getDriverName(),
-            'user' => (string) (Auth::guard('web')->id() ?? ''),
+            'user' => (string) (Auth::guard('db_session')->id() ?? ''),
         ]);
         $fileName = ExportFilename::withExtension($base, 'sql', 'none');
 
         $export = Export::create([
-            'user_kind' => 'web',
-            'user_identifier' => (string) Auth::guard('web')->id(),
-            'connection_id' => $connection->id,
+            'user_kind' => 'direct_db',
+            'user_identifier' => (string) Auth::guard('db_session')->id(),
             'database_name' => $this->database,
             'format' => 'sql_dump',
             'options' => $this->mode === 'custom'

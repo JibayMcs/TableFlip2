@@ -42,7 +42,7 @@ class Editor extends Component
     public function mount(CurrentConnection $current): void
     {
         if ($current->driver() === null) {
-            $this->redirect(route('connections.index'), navigate: true);
+            $this->redirect(route('login'), navigate: true);
 
             return;
         }
@@ -295,7 +295,6 @@ class Editor extends Component
             'schema' => $schema,
             'dialect' => $dialect,
             'history' => $history->recent($this->historySearch),
-            'exportConnectionId' => $current->connectionId(),
         ]);
     }
 

@@ -7,14 +7,14 @@ namespace App\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
-use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Resolve the active locale on every request.
  *
  * Priority order :
- *   1. Authenticated web user's saved `locale` column.
+ *   1. `tableflip_locale` cookie set when the user picks a language in
+ *      the UI.
  *   2. Accept-Language HTTP header, intersected with the supported set.
  *   3. config('app.fallback_locale').
  */
@@ -24,7 +24,7 @@ class SetLocale
 
     public function handle(Request $request, Closure $next): Response
     {
-        $locale = $this->fromAuth()
+        $locale = $this->fromCookie($request)
             ?? $this->fromAcceptLanguage($request)
             ?? (string) config('app.fallback_locale', 'en');
 
@@ -33,12 +33,9 @@ class SetLocale
         return $next($request);
     }
 
-    private function fromAuth(): ?string
+    private function fromCookie(Request $request): ?string
     {
-        if (! Auth::guard('web')->check()) {
-            return null;
-        }
-        $candidate = (string) (Auth::guard('web')->user()->locale ?? '');
+        $candidate = (string) ($request->cookie('tableflip_locale') ?? '');
 
         return in_array($candidate, self::SUPPORTED, true) ? $candidate : null;
     }

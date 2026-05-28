@@ -33,8 +33,6 @@ class Launcher extends Component
 
     public string $defaultFileName = 'export';
 
-    public ?int $connectionId = null;
-
     public ?string $databaseName = null;
 
     /** When true, the inline trigger button is suppressed — the host is expected to dispatch `show-export-launcher`. */
@@ -70,7 +68,6 @@ class Launcher extends Component
         string $sourceKind,
         array $sourcePayload,
         string $defaultFileName = 'export',
-        ?int $connectionId = null,
         ?string $databaseName = null,
         bool $external = false,
     ): void {
@@ -78,7 +75,6 @@ class Launcher extends Component
         $this->sourcePayload = $sourcePayload;
         $this->defaultFileName = Str::slug($defaultFileName) ?: 'export';
         $this->fileName = $this->defaultFileName;
-        $this->connectionId = $connectionId;
         $this->databaseName = $databaseName;
         $this->external = $external;
     }
@@ -117,13 +113,8 @@ class Launcher extends Component
 
     public function startExport(): void
     {
-        if (! Auth::guard('web')->check()) {
-            $this->error = 'Exports require a TableFlip account (direct-DB sessions cannot be replayed by the worker).';
-
-            return;
-        }
-        if ($this->connectionId === null) {
-            $this->error = 'No active saved connection — pick or create one before exporting.';
+        if (! Auth::guard('db_session')->check()) {
+            $this->error = 'Not authenticated.';
 
             return;
         }
@@ -142,9 +133,8 @@ class Launcher extends Component
         }
 
         $export = Export::create([
-            'user_kind' => 'web',
-            'user_identifier' => (string) Auth::guard('web')->id(),
-            'connection_id' => $this->connectionId,
+            'user_kind' => 'direct_db',
+            'user_identifier' => (string) Auth::guard('db_session')->id(),
             'database_name' => $this->databaseName,
             'format' => $format->value,
             'options' => $this->buildOptions($format),
@@ -187,7 +177,7 @@ class Launcher extends Component
     public function render(): View
     {
         return view('livewire.exports.launcher', [
-            'available' => Auth::guard('web')->check() && $this->connectionId !== null,
+            'available' => Auth::guard('db_session')->check(),
             'showTrigger' => ! $this->external,
         ]);
     }

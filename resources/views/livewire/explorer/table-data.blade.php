@@ -210,13 +210,12 @@
                 </div>
             </div>
 
-            @if (! $error && $exportConnectionId !== null)
+            @if (! $error)
                 <livewire:exports.launcher
                     wire:key="export-launcher-{{ $mode }}-{{ $table }}"
                     :source-kind="$exportSourceKind"
                     :source-payload="$exportSourcePayload"
                     :default-file-name="$table"
-                    :connection-id="$exportConnectionId"
                     :database-name="$database" />
             @endif
             <span class="inline-flex items-center gap-1">

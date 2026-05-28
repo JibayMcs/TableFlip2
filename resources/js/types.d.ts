@@ -14,4 +14,5 @@ export interface AlpineLike {
             ctx: { cleanup: (fn: () => void) => void; evaluate: (expr: string) => unknown },
         ) => void,
     ): void;
+    reactive<T extends object>(target: T): T;
 }

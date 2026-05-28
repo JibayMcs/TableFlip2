@@ -10,92 +10,70 @@ use App\Infrastructure\Database\DatabaseConnectionManager;
 use Illuminate\Support\Facades\Auth;
 
 /**
- * Unified access to "the connection currently in use", regardless of which
- * auth guard the request is authenticated against:
- *  - web guard (Breeze user): the saved DatabaseConnection picked via the
- *    ActiveConnectionResolver, if any.
- *  - db_session guard (direct-DB user): the connection embedded in the
- *    session payload.
+ * Wraps the connection bound to the current direct-DB session.
+ * Resolves the active driver from the credentials stored in the
+ * `db_session` guard.
  */
 class CurrentConnection
 {
     public function __construct(
-        private readonly ActiveConnectionResolver $resolver,
         private readonly DatabaseConnectionManager $manager,
     ) {}
 
     public function driver(): ?DatabaseDriverInterface
     {
-        if (Auth::guard('web')->check()) {
-            return $this->resolver->driver();
+        $user = $this->currentUser();
+        if ($user === null) {
+            return null;
         }
 
-        if (Auth::guard('db_session')->check()) {
-            /** @var DirectDbUser $user */
-            $user = Auth::guard('db_session')->user();
-            $id = 'direct_'.$user->id;
-            if (! $this->manager->has($id)) {
-                $this->manager->register($id, $user->config);
-            }
-
-            return $this->manager->get($id);
+        $id = 'direct_'.$user->id;
+        if (! $this->manager->has($id)) {
+            $this->manager->register($id, $user->config);
         }
 
-        return null;
-    }
-
-    /**
-     * The saved DatabaseConnection id for the active session, or null when the
-     * user is connected directly (db_session guard). Used by the export
-     * launcher because the queue worker can only replay saved connections.
-     */
-    public function connectionId(): ?int
-    {
-        if (Auth::guard('web')->check()) {
-            return $this->resolver->currentId();
-        }
-
-        return null;
+        return $this->manager->get($id);
     }
 
     public function label(): string
     {
-        if (Auth::guard('web')->check()) {
-            $connection = $this->resolver->current();
-
-            return $connection?->name ?? 'No connection';
-        }
-
-        if (Auth::guard('db_session')->check()) {
-            /** @var DirectDbUser $user */
-            $user = Auth::guard('db_session')->user();
-
-            return $user->label();
-        }
-
-        return 'No connection';
+        return $this->currentUser()?->label() ?? 'No connection';
     }
 
     /**
-     * The "preferred" database for the current connection, if any. This is
-     * the database the user selected at connection time (saved or direct).
-     * Empty when the user is connected server-only (PMA-style).
+     * Pool identifier for the active session. Stable for the lifetime
+     * of the session — used as a cache key by the schema index.
+     */
+    public function poolId(): ?string
+    {
+        $user = $this->currentUser();
+
+        return $user === null ? null : 'direct_'.$user->id;
+    }
+
+    /**
+     * The database the user pointed at when logging in. Empty when the
+     * session is server-only (PMA-style).
      */
     public function defaultDatabase(): ?string
     {
-        if (Auth::guard('web')->check()) {
-            $connection = $this->resolver->current();
-
-            return $connection?->database ?: null;
+        $user = $this->currentUser();
+        if ($user === null) {
+            return null;
         }
 
-        if (Auth::guard('db_session')->check()) {
-            /** @var DirectDbUser $user */
-            $user = Auth::guard('db_session')->user();
+        return $user->config->hasDatabase() ? $user->config->database : null;
+    }
 
-            return $user->config->hasDatabase() ? $user->config->database : null;
+    private function currentUser(): ?DirectDbUser
+    {
+        if (! Auth::guard('db_session')->check()) {
+            return null;
         }
 
-        return null;
+        /** @var DirectDbUser $user */
+        $user = Auth::guard('db_session')->user();
+
+        return $user;
     }
 }

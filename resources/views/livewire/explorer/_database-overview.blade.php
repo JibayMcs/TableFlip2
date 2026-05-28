@@ -34,16 +34,14 @@
         </div>
 
         <div class="flex items-center gap-2">
-            @auth('web')
-                <a href="{{ route('exports.database', ['db' => $selectedDatabase]) }}" wire:navigate
-                    x-tooltip.bottom="{{ __('exports.database.title_segment') }}"
-                    class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-zinc-300 dark:border-zinc-700 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800">
-                    <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
-                    </svg>
-                    {{ __('exports.database.title_segment') }}
-                </a>
-            @endauth
+            <a href="{{ route('exports.database', ['db' => $selectedDatabase]) }}" wire:navigate
+                x-tooltip.bottom="{{ __('exports.database.title_segment') }}"
+                class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-zinc-300 dark:border-zinc-700 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800">
+                <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                </svg>
+                {{ __('exports.database.title_segment') }}
+            </a>
 
             {{-- View mode toggle --}}
             <div class="inline-flex border border-zinc-300 dark:border-zinc-700 rounded-md overflow-hidden">

@@ -50,10 +50,6 @@ class TableOperationLogger
      */
     private function resolveUser(): array
     {
-        if (Auth::guard('web')->check()) {
-            return ['web', (string) Auth::guard('web')->id()];
-        }
-
         if (Auth::guard('db_session')->check()) {
             /** @var DirectDbUser $u */
             $u = Auth::guard('db_session')->user();

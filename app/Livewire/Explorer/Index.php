@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Livewire\Explorer;
 
-use App\Application\Connections\ActiveConnectionResolver;
 use App\Application\Connections\CurrentConnection;
 use App\Application\Schema\DatabaseOverviewService;
 use App\Application\Schema\SchemaIndexService;
@@ -71,7 +70,7 @@ class Index extends Component
     public function mount(CurrentConnection $current): void
     {
         if ($current->driver() === null) {
-            $this->redirect(route('connections.index'), navigate: true);
+            $this->redirect(route('login'), navigate: true);
 
             return;
         }
@@ -243,7 +242,6 @@ class Index extends Component
         TruncateTableAction $truncate,
         DropTableAction $drop,
         SchemaIndexService $indexer,
-        ActiveConnectionResolver $resolver,
     ): void {
         if ($this->pendingBulkAction === null || $this->selectedDatabase === null) {
             return;
@@ -300,10 +298,10 @@ class Index extends Component
         // Drop = schema shape changed → refresh the search index so the
         // sidebar reflects reality.
         if ($action === 'drop') {
-            $connection = $resolver->current();
-            if ($connection !== null) {
+            $poolId = $current->poolId();
+            if ($poolId !== null) {
                 try {
-                    $indexer->refresh($driver, $connection->poolId());
+                    $indexer->refresh($driver, $poolId);
                 } catch (Throwable) {
                 }
             }
@@ -319,22 +317,20 @@ class Index extends Component
     public function reindexSchema(
         CurrentConnection $current,
         SchemaIndexService $indexer,
-        ActiveConnectionResolver $resolver,
     ): void {
         $driver = $current->driver();
-        $connection = $resolver->current();
-        if ($driver === null || $connection === null) {
+        $poolId = $current->poolId();
+        if ($driver === null || $poolId === null) {
             return;
         }
 
-        $indexer->refresh($driver, $connection->poolId());
+        $indexer->refresh($driver, $poolId);
     }
 
     public function render(
         CurrentConnection $current,
         SchemaIntrospectionService $schema,
         SchemaIndexService $indexer,
-        ActiveConnectionResolver $resolver,
         DatabaseOverviewService $overviewSvc,
     ): View {
         $driver = $current->driver();
@@ -351,10 +347,10 @@ class Index extends Component
             // Cross-database index for the sidebar search — cached forever,
             // refreshed automatically when the engine's schema signature
             // changes, or manually via the Reindex button.
-            $connection = $resolver->current();
-            if ($connection !== null) {
+            $poolId = $current->poolId();
+            if ($poolId !== null) {
                 try {
-                    $searchIndex = $indexer->index($driver, $connection->poolId());
+                    $searchIndex = $indexer->index($driver, $poolId);
                 } catch (Throwable) {
                     $searchIndex = [];
                 }

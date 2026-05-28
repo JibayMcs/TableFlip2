@@ -38,8 +38,6 @@ return [
         'sql' => 'SQL',
         'diagram' => 'Diagram',
         'exports' => 'Exports',
-        'users' => 'Users',
         'docs' => 'Docs',
-        'profile' => 'Profile',
     ],
 ];

@@ -10,14 +10,8 @@ return new class extends Migration
     {
         Schema::create('exports', function (Blueprint $table) {
             $table->id();
-            $table->string('user_kind', 16);          // 'web' or 'direct_db'
+            $table->string('user_kind', 16);          // 'direct_db' since CP1 (kept for retro-compat, dropped in CP3)
             $table->string('user_identifier', 64)->index();
-
-            $table->foreignId('connection_id')
-                ->nullable()
-                ->constrained('database_connections')
-                ->nullOnDelete();
-
             $table->string('database_name')->nullable();
 
             $table->string('format', 8);              // 'csv' | 'sql' | 'json'
