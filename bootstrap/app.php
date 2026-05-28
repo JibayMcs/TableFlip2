@@ -28,6 +28,11 @@ return Application::configure(basePath: dirname(__DIR__))
             'permission' => PermissionMiddleware::class,
             'role_or_permission' => RoleOrPermissionMiddleware::class,
         ]);
+
+        // Behind Traefik / nginx / Caddy : trust the reverse proxy so the
+        // X-Forwarded-* headers (scheme, host, port) are honoured and
+        // generated URLs match the public-facing scheme (HTTPS).
+        $middleware->trustProxies(at: '*');
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
