@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Application\Export;
 
+use App\Application\Export\Sql\SqlDumpExporter;
 use App\Application\Schema\SchemaIntrospectionService;
 use App\Application\Schema\TableDataQueryService;
 use App\Domain\Database\Contracts\DatabaseDriverInterface;
@@ -38,6 +39,7 @@ class ExportAction
         private readonly ExporterFactory $exporterFactory,
         private readonly TableDataQueryService $tableQueryService,
         private readonly SchemaIntrospectionService $schemaService,
+        private readonly SqlDumpExporter $sqlDumpExporter,
     ) {}
 
     public function run(Export $export): void
@@ -69,6 +71,15 @@ class ExportAction
         $driver = $this->driverFactory->create($connection->toConnectionConfig());
 
         try {
+            // Database-wide SQL dump : a different pipeline (multi-table,
+            // structure + data, dialect-aware) than the per-row streaming
+            // exporters used for CSV/JSON/legacy SQL.
+            if ($export->source_kind === 'database') {
+                $this->executeDatabaseDump($export, $driver);
+
+                return;
+            }
+
             [$sql, $bindings, $sourceTable] = $this->resolveQuery($driver, $export);
 
             // Switch the connection's current database when the export targets
@@ -127,6 +138,54 @@ class ExportAction
         } finally {
             $driver->disconnect();
         }
+    }
+
+    /**
+     * Run the multi-table SQL dump pipeline. Source payload shape:
+     *   {
+     *     database: 'db_name',
+     *     schema?: 'schema_name',
+     *     tables: [{name, structure: bool, data: bool}, ...]
+     *   }
+     */
+    private function executeDatabaseDump(Export $export, DatabaseDriverInterface $driver): void
+    {
+        $payload = (array) ($export->source_payload ?? []);
+        $database = (string) ($payload['database'] ?? $export->database_name ?? '');
+        $schema = $payload['schema'] ?? null;
+        $tables = (array) ($payload['tables'] ?? []);
+
+        if ($database === '' || $tables === []) {
+            throw new \RuntimeException('Database dump requires "database" and a non-empty "tables" list.');
+        }
+
+        if (in_array($driver->getDriverName(), ['mysql', 'mariadb', 'sqlsrv'], true)) {
+            try {
+                $driver->statement('USE '.$driver->quoteIdentifier($database));
+            } catch (Throwable) {
+            }
+        }
+
+        $relativePath = $this->buildRelativePath($export);
+        $absolutePath = Storage::disk($this->disk())->path($relativePath);
+        $this->ensureDirectoryExists($absolutePath);
+
+        $stream = fopen($absolutePath, 'wb');
+        if ($stream === false) {
+            throw new \RuntimeException("Cannot open export file: {$relativePath}");
+        }
+
+        try {
+            $this->sqlDumpExporter->dump($stream, $driver, $database, $tables, (array) ($export->options ?? []));
+        } finally {
+            fclose($stream);
+        }
+
+        $export->update([
+            'file_path' => $relativePath,
+            'row_count' => 0, // not tracked for dumps; could be totalled per-table later
+            'byte_size' => (int) (file_exists($absolutePath) ? filesize($absolutePath) : 0),
+        ]);
     }
 
     /**
