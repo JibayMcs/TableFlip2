@@ -7,6 +7,7 @@ return [
     'disconnect' => 'Déconnecter',
     'save' => 'Enregistrer',
     'cancel' => 'Annuler',
+    'coming_soon' => 'bientôt',
     'delete' => 'Supprimer',
     'edit' => 'Modifier',
     'create' => 'Créer',

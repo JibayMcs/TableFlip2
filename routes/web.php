@@ -6,6 +6,7 @@ use App\Livewire\Auth\Profile;
 use App\Livewire\Connections\Form as ConnectionForm;
 use App\Livewire\Connections\Index as ConnectionsIndex;
 use App\Livewire\Explorer\Index as ExplorerIndex;
+use App\Livewire\Exports\DatabaseExport;
 use App\Livewire\Exports\Index as ExportsIndex;
 use App\Livewire\Sql\Editor as SqlEditor;
 use App\Livewire\Visualizer\Index as VisualizerIndex;
@@ -46,6 +47,7 @@ Route::middleware('auth:web')->group(function () {
     });
 
     Route::get('/exports', ExportsIndex::class)->name('exports.index');
+    Route::get('/exports/database', DatabaseExport::class)->name('exports.database');
     Route::get('/exports/{export}/download', function (Export $export, \Illuminate\Http\Request $request) {
         abort_unless($request->hasValidSignature(), 403);
         abort_unless($export->user_identifier === (string) Auth::id(), 404);
