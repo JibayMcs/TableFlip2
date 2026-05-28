@@ -80,6 +80,10 @@ RUN apk add --no-cache \
         bcmath \
         zip \
         && \
+    # phpredis (PECL) — Laravel's default Redis client. Without this the
+    # worker / cache / sessions throw "Class Redis not found".
+    pecl install redis && \
+    docker-php-ext-enable redis && \
     apk del .build-deps && \
     rm -rf /tmp/* /var/cache/apk/*
 
