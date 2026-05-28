@@ -1,38 +1,41 @@
-#!/bin/sh
-# TableFlip — container entrypoint.
+#!/bin/bash
+# TableFlip — container entrypoint (Apache stack).
 #
 # Boot order :
+#   0. Create the storage tree on the mounted volume (vol starts empty).
 #   1. Fail fast if APP_KEY is missing (we never auto-generate one in
 #      production — losing it would invalidate every encrypted DB password).
-#   2. Wait for the configured database to accept connections (best-effort,
-#      30s timeout — if it never comes up we let Laravel surface the error).
-#   3. Cache config / routes / events so the first request is fast.
-#   4. Run pending migrations.
-#   5. Hand over to whatever CMD was passed (web server / queue worker /
-#      scheduler — we don't make assumptions).
+#   2. Touch the SQLite file if missing (Laravel refuses to open a missing
+#      SQLite file even in "create on connect" mode).
+#   3. Wait for the configured remote DB (skipped for SQLite) + Redis.
+#   4. Clear then cache config / routes / events / views.
+#   5. Run pending migrations (set MIGRATE_ON_BOOT=0 to skip).
+#   6. storage:link + chown.
+#   7. exec "$@" (apache2-foreground / queue:work / schedule:work).
 
 set -e
 
-# 0. Create the storage tree on the mounted volume. We don't ship these
-# dirs in the image (would conflict with Dokploy's volume init), so the
-# first boot has to bootstrap them.
-mkdir -p /app/storage/app/exports \
-         /app/storage/app/public \
-         /app/storage/app/private \
-         /app/storage/framework/cache/data \
-         /app/storage/framework/sessions \
-         /app/storage/framework/views \
-         /app/storage/logs
+APP_ROOT=/var/www/html
+
+# 0. Storage tree on the volume — entrypoint creates these every boot so the
+# named volume starts empty and Dokploy's volume init doesn't conflict with
+# image-shipped storage content.
+mkdir -p "$APP_ROOT"/storage/app/exports \
+         "$APP_ROOT"/storage/app/public \
+         "$APP_ROOT"/storage/app/private \
+         "$APP_ROOT"/storage/framework/cache/data \
+         "$APP_ROOT"/storage/framework/sessions \
+         "$APP_ROOT"/storage/framework/views \
+         "$APP_ROOT"/storage/logs
 
 if [ -z "${APP_KEY:-}" ]; then
     echo "FATAL: APP_KEY is not set."
-    echo "       Generate one once with `php artisan key:generate --show`"
+    echo "       Generate one once with 'php artisan key:generate --show'"
     echo "       and inject it as an environment variable (don't lose it !)."
     exit 1
 fi
 
-# 2a. SQLite : make sure the file exists before migrations run. Laravel
-# refuses to open a missing SQLite file even in "create on connect" mode.
+# 2. SQLite : create the file before migrations run.
 if [ "${DB_CONNECTION:-sqlite}" = "sqlite" ] && [ -n "${DB_DATABASE:-}" ]; then
     sqlite_file="${DB_DATABASE}"
     sqlite_dir="$(dirname "$sqlite_file")"
@@ -45,7 +48,7 @@ if [ "${DB_CONNECTION:-sqlite}" = "sqlite" ] && [ -n "${DB_DATABASE:-}" ]; then
     chmod 0664 "$sqlite_file" 2>/dev/null || true
 fi
 
-# 2b. Remote DB wait — only when DB_HOST / DB_PORT are set (mysql / pgsql /
+# 3a. Remote DB wait — only when DB_HOST + DB_PORT are set (mysql / pgsql /
 # sqlsrv). SQLite skips this entirely.
 if [ "${DB_CONNECTION:-sqlite}" != "sqlite" ] && [ -n "${DB_HOST:-}" ] && [ -n "${DB_PORT:-}" ]; then
     echo "Waiting for ${DB_HOST}:${DB_PORT} (up to 30s)…"
@@ -60,8 +63,7 @@ if [ "${DB_CONNECTION:-sqlite}" != "sqlite" ] && [ -n "${DB_HOST:-}" ] && [ -n "
     done
 fi
 
-# 2c. Redis wait — sessions / queue / cache live there, so it's worth
-# making sure it's up before we start serving requests.
+# 3b. Redis wait — sessions / queue / cache live there.
 if [ -n "${REDIS_HOST:-}" ]; then
     echo "Waiting for ${REDIS_HOST}:${REDIS_PORT:-6379} (up to 30s)…"
     i=0
@@ -75,7 +77,9 @@ if [ -n "${REDIS_HOST:-}" ]; then
     done
 fi
 
-# 3. Cache. We *clear* first so previous-image caches don't poison the new one.
+cd "$APP_ROOT"
+
+# 4. Cache. Clear first so previous-image caches don't poison the new one.
 php artisan config:clear  >/dev/null 2>&1 || true
 php artisan route:clear   >/dev/null 2>&1 || true
 php artisan view:clear    >/dev/null 2>&1 || true
@@ -86,17 +90,14 @@ php artisan route:cache   >/dev/null
 php artisan view:cache    >/dev/null
 php artisan event:cache   >/dev/null
 
-# 4. Migrate. Set MIGRATE_ON_BOOT=0 to skip (handy if you orchestrate
+# 5. Migrate. Set MIGRATE_ON_BOOT=0 to skip (handy if you orchestrate
 # migrations from a separate one-shot job).
 if [ "${MIGRATE_ON_BOOT:-1}" = "1" ]; then
     php artisan migrate --force --no-interaction
 fi
 
-# Storage symlink — idempotent, so safe to run every boot.
-php artisan storage:link >/dev/null 2>&1 || true
-
-# Make sure storage / cache stay writable when Docker mounts a volume over
-# them (volume created with root ownership).
-chown -R www-data:www-data /app/storage /app/bootstrap/cache 2>/dev/null || true
+# 6. Storage symlink (idempotent) + ownership on the volume.
+php artisan storage:link --force >/dev/null 2>&1 || true
+chown -R www-data:www-data "$APP_ROOT"/storage "$APP_ROOT"/bootstrap/cache 2>/dev/null || true
 
 exec "$@"

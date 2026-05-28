@@ -2,15 +2,18 @@
 #
 # TableFlip — production image.
 #
-# Multi-stage build:
-#   1. composer  : install PHP dependencies (no dev, optimised autoloader)
-#   2. node      : install JS deps and build the Vite bundle
-#   3. runtime   : FrankenPHP + the app, with both PDO drivers we ship
-#                  (mysql / pgsql / sqlsrv) pre-installed.
+# Modeled on the Cerise prod stack (which runs reliably on the same Dokploy
+# server) : Apache + mod_php on `php:8.3-apache` (Debian Bookworm). No
+# FrankenPHP / Caddy : the simpler stack means Traefik routing "just works"
+# and the image is on a base widely battle-tested in this infra.
 #
-# Run behind a reverse proxy (Traefik / Caddy / nginx) that handles TLS.
-# The container listens on port 8080 (HTTP).
+# Multi-stage build :
+#   1. composer : PHP deps (no dev, optimised autoloader)
+#   2. node     : npm + Vite bundle
+#   3. runtime  : Apache + mod_php with the 4 PDO drivers we ship
+#                 (mysql / pgsql / sqlsrv / sqlite) + phpredis.
 #
+# Listens on port 80 behind Traefik (TLS terminated upstream).
 
 # ---------- 1. composer ----------
 FROM composer:2 AS composer
@@ -33,41 +36,44 @@ COPY resources ./resources
 COPY vite.config.* ./
 COPY tsconfig*.json ./
 COPY public ./public
-# Vendor files are referenced by app.ts (livewire.esm), copy what we need.
+# Vendor files referenced by app.ts (livewire.esm).
 COPY --from=composer /app/vendor/livewire/livewire/dist /app/vendor/livewire/livewire/dist
 RUN npm run build
 
-# ---------- 3. runtime (FrankenPHP) ----------
-FROM dunglas/frankenphp:1-php8.3-alpine AS runtime
+# ---------- 3. runtime (Apache + mod_php) ----------
+FROM php:8.3-apache
 
-# System packages we need at runtime :
-#  - icu-libs / oniguruma : intl + mbstring
-#  - libpq                : PostgreSQL client
-#  - unixodbc + freetds   : SQL Server connectivity
-#  - git + unzip          : composer scripts may need them
-RUN apk add --no-cache \
-        icu-libs \
-        oniguruma \
-        libpq \
-        libzip \
-        sqlite-libs \
-        unixodbc \
-        freetds \
-        gettext \
+ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
+
+# 1) Apache : point DocumentRoot at public/, enable mod_rewrite (Laravel).
+RUN sed -ri -e "s!/var/www/html!${APACHE_DOCUMENT_ROOT}!g" /etc/apache2/sites-available/*.conf \
+    && sed -ri -e "s!/var/www/!${APACHE_DOCUMENT_ROOT}/!g" /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf \
+    && a2enmod rewrite
+
+# 2) System libs for the PHP extensions we compile + the 4 DB clients.
+#  - libicu : intl + mbstring
+#  - libpq  : PostgreSQL
+#  - unixodbc + freetds : SQL Server (via pdo_dblib here ; we add sqlsrv via PECL too)
+#  - libsqlite3-dev : for pdo_sqlite (storage DB)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        gnupg ca-certificates apt-transport-https \
+        curl unzip git \
         netcat-openbsd \
-        && \
-    apk add --no-cache --virtual .build-deps \
-        $PHPIZE_DEPS \
-        icu-dev \
-        oniguruma-dev \
-        libpq-dev \
-        libzip-dev \
-        sqlite-dev \
-        unixodbc-dev \
-        freetds-dev \
-        && \
-    docker-php-ext-configure intl && \
-    docker-php-ext-install -j$(nproc) \
+        libicu-dev libzip-dev libxml2-dev libonig-dev \
+        libpq-dev libsqlite3-dev \
+        unixodbc-dev freetds-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# 3) Microsoft repo + msodbcsql18 (runtime driver for sqlsrv/pdo_sqlsrv).
+RUN curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/microsoft-prod.gpg] https://packages.microsoft.com/debian/12/prod bookworm main" > /etc/apt/sources.list.d/mssql-release.list \
+    && apt-get update \
+    && ACCEPT_EULA=Y apt-get install -y --no-install-recommends msodbcsql18 \
+    && rm -rf /var/lib/apt/lists/*
+
+# 4) Core PHP extensions via docker-php-ext-install.
+RUN docker-php-ext-install -j"$(nproc)" \
         intl \
         mbstring \
         pcntl \
@@ -78,41 +84,34 @@ RUN apk add --no-cache \
         pdo_sqlite \
         opcache \
         bcmath \
-        zip \
-        && \
-    # phpredis (PECL) — Laravel's default Redis client. Without this the
-    # worker / cache / sessions throw "Class Redis not found".
-    pecl install redis && \
-    docker-php-ext-enable redis && \
-    apk del .build-deps && \
-    rm -rf /tmp/* /var/cache/apk/*
+        zip
 
-WORKDIR /app
+# 5) PECL : phpredis (Laravel default Redis client) + sqlsrv/pdo_sqlsrv (MSSQL).
+RUN pecl install redis sqlsrv pdo_sqlsrv \
+    && docker-php-ext-enable redis sqlsrv pdo_sqlsrv \
+    && php -m | grep -iE 'redis|sqlsrv|pdo_sqlsrv' || (php -m && false)
 
-# Copy app + built artefacts in the right order so layer cache stays warm.
-COPY --from=composer /app/vendor /app/vendor
-COPY --from=node /app/public/build /app/public/build
-COPY . /app
-
-# Production tunings : opcache validate_timestamps=0, JIT on.
+# 6) PHP production config + TableFlip overrides (memory, opcache, JIT…).
+RUN cp /usr/local/etc/php/php.ini-production /usr/local/etc/php/php.ini
 COPY .docker/php.ini /usr/local/etc/php/conf.d/zz-tableflip.ini
 
-# FrankenPHP worker config + Caddyfile (HTTP only — TLS handled by Traefik).
-COPY .docker/Caddyfile /etc/caddy/Caddyfile
+# 7) Code + built artefacts (ownership = www-data, Apache's user).
+WORKDIR /var/www/html
+COPY --chown=www-data:www-data . /var/www/html
+COPY --chown=www-data:www-data --from=composer /app/vendor /var/www/html/vendor
+COPY --chown=www-data:www-data --from=node /app/public/build /var/www/html/public/build
 
-# Storage tree lives entirely on the mounted volume — entrypoint creates
-# the subdirs on first boot. We DON'T pre-create them here : if we did,
-# Docker would pre-populate the named volume from image content, which
-# conflicts with Dokploy's volume management.
-RUN mkdir -p bootstrap/cache && \
-    chown -R www-data:www-data bootstrap/cache
+# 8) Bootstrap cache only — the rest of storage/ lives on the named volume
+# and is created at boot by the entrypoint (avoids Docker pre-populating
+# the volume from image content, which conflicts with Dokploy).
+RUN mkdir -p bootstrap/cache \
+    && chown -R www-data:www-data bootstrap/cache
 
-# Entrypoint runs migrations + caches the config/routes/views then hands
-# over to the FrankenPHP server (or queue worker, depending on CMD).
+# 9) Entrypoint : SQLite touch + redis wait + cache + migrate, then exec CMD.
 COPY .docker/entrypoint.sh /usr/local/bin/tableflip-entrypoint
 RUN chmod +x /usr/local/bin/tableflip-entrypoint
 
-EXPOSE 8080
+EXPOSE 80
 
 ENTRYPOINT ["/usr/local/bin/tableflip-entrypoint"]
-CMD ["frankenphp", "run", "--config", "/etc/caddy/Caddyfile"]
+CMD ["apache2-foreground"]

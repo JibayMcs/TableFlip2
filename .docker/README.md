@@ -3,16 +3,15 @@
 This folder ships everything you need to run TableFlip in production
 behind a reverse proxy (Traefik / nginx / Caddy).
 
-The image is built around [**FrankenPHP**](https://frankenphp.dev) : one
-binary that serves HTTP + PHP without a separate nginx / php-fpm pair.
-It's designed for Dokploy-style deployments where Traefik already
-handles TLS in front.
+The image is **Apache + mod_php on `php:8.3-apache` (Debian Bookworm)** —
+the same battle-tested stack our sibling Cerise project runs in this
+infra. Listens on port 80 behind Traefik (TLS terminated upstream).
 
 ## Default stack — zero external services
 
 | Service | Purpose | Why |
 |---|---|---|
-| `app` | FrankenPHP serving on `:8080` | The actual TableFlip web app |
+| `app` | Apache + mod_php serving on `:80` | The actual TableFlip web app |
 | `worker` | `php artisan queue:work` | Async export jobs |
 | `scheduler` | `php artisan schedule:work` | Daily cleanup-exports |
 | `redis` | queue + cache + sessions | Hot paths, avoids disk I/O on SQLite |
@@ -29,8 +28,7 @@ Postgres — see [Upgrading the storage DB](#upgrading-the-storage-db).
 
 | File | Purpose |
 |---|---|
-| `Dockerfile` | Multi-stage build (composer → node → FrankenPHP runtime) |
-| `Caddyfile` | FrankenPHP routing config (HTTP on `:8080`) |
+| `Dockerfile` | Multi-stage build (composer → node → Apache+mod_php runtime) |
 | `php.ini` | Production tuning : opcache + JIT, 512 MB memory, 600 s timeout |
 | `entrypoint.sh` | Creates SQLite file → wait Redis → cache config/routes/views → migrate → exec CMD |
 | `docker-compose.yml` | The 4-service stack above |
@@ -54,11 +52,11 @@ docker compose -f .docker/docker-compose.yml --env-file .env.docker up -d --buil
 ```
 
 The `app` container will :
-- create `/app/storage/app/tableflip.sqlite` if missing (first run)
+- create `/var/www/html/storage/app/tableflip.sqlite` if missing (first run)
 - wait up to 30 s for Redis
 - `php artisan migrate --force`
 - cache config / routes / views / events
-- start FrankenPHP on `:8080`
+- start Apache on `:80`
 
 ## Dokploy deployment
 
@@ -70,7 +68,7 @@ The `app` container will :
    - host : `tableflip.yourdomain.tld`
    - entrypoint : `websecure`
    - cert resolver : whatever your Dokploy is set up to use
-   - service port : `8080`
+   - service port : `80`
 4. Deploy. Dokploy will build the image, pull Redis, start the 4
    services.
 
@@ -95,8 +93,8 @@ form.
 
 ## What's NOT in this stack
 
-- **No nginx / Caddy in front** — Traefik or whatever your Dokploy
-  uses handles TLS + routing.
+- **No nginx / Caddy in front** — Traefik (or whatever Dokploy uses)
+  handles TLS + routing ; Apache serves :80 inside the container.
 - **No bundled MariaDB/Postgres** — TableFlip stores its own data in
   SQLite. Browse any MariaDB/Postgres/MSSQL/SQLite by adding it at
   runtime via the Connections UI or the direct-DB login.
@@ -152,7 +150,7 @@ job).
 | `FATAL: APP_KEY is not set.` at boot | `APP_KEY` missing from env. Generate one with `php artisan key:generate --show` |
 | 500 + "No application encryption key has been specified" | Same — env not picked up by the container |
 | Queue jobs stuck in `pending` | `worker` service crashed — check `docker logs <worker>` |
-| Exports never complete | Worker not running, OR storage volume not writable. Check `docker exec <app> ls -la /app/storage/app/exports` |
-| SQLite file readable but writes fail | Volume created with root ownership — entrypoint should chown to `www-data` on every boot. Check `docker exec <app> ls -la /app/storage/app/tableflip.sqlite` |
+| Exports never complete | Worker not running, OR storage volume not writable. Check `docker exec <app> ls -la /var/www/html/storage/app/exports` |
+| SQLite file readable but writes fail | Volume created with root ownership — entrypoint should chown to `www-data` on every boot. Check `docker exec <app> ls -la /var/www/html/storage/app/tableflip.sqlite` |
 | Redis connection refused | The `redis` service is down or the `REDIS_PASSWORD` env doesn't match |
 | `connection refused` from the direct-DB login | Wrong host (must be reachable from the Docker network — `localhost` from the host machine becomes `host.docker.internal` from inside the container) |
