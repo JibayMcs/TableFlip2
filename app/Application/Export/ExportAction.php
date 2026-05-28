@@ -135,6 +135,8 @@ class ExportAction
                 'row_count' => $rowCount,
                 'byte_size' => (int) (file_exists($absolutePath) ? filesize($absolutePath) : 0),
             ]);
+
+            $this->applyCompression($export, $absolutePath, $relativePath);
         } finally {
             $driver->disconnect();
         }
@@ -186,6 +188,8 @@ class ExportAction
             'row_count' => 0, // not tracked for dumps; could be totalled per-table later
             'byte_size' => (int) (file_exists($absolutePath) ? filesize($absolutePath) : 0),
         ]);
+
+        $this->applyCompression($export, $absolutePath, $relativePath);
     }
 
     /**
@@ -285,5 +289,75 @@ class ExportAction
     private function disk(): string
     {
         return (string) config('tableflip.exports.disk', 'local');
+    }
+
+    /**
+     * Compress the freshly-written export file according to
+     * `options.compression` (gzip|zip|none). Replaces the file in place and
+     * updates the Export model's file_path + file_name to reflect the new
+     * extension. No-op when compression is 'none' or absent.
+     *
+     * Returns the (possibly new) absolute path.
+     */
+    private function applyCompression(Export $export, string $absolutePath, string $relativePath): string
+    {
+        $compression = (string) ((array) ($export->options ?? []))['compression'] ?? 'none';
+        if (! in_array($compression, ['gzip', 'zip'], true)) {
+            return $absolutePath;
+        }
+
+        if (! is_file($absolutePath)) {
+            return $absolutePath;
+        }
+
+        if ($compression === 'gzip') {
+            $newAbs = $absolutePath.'.gz';
+            $in = fopen($absolutePath, 'rb');
+            $out = gzopen($newAbs, 'wb6');
+            if ($in === false || $out === false) {
+                throw new \RuntimeException("Cannot open streams for gzip compression of {$relativePath}");
+            }
+            try {
+                while (! feof($in)) {
+                    gzwrite($out, (string) fread($in, 64 * 1024));
+                }
+            } finally {
+                fclose($in);
+                gzclose($out);
+            }
+            @unlink($absolutePath);
+
+            $newRelative = $relativePath.'.gz';
+            $export->update([
+                'file_path' => $newRelative,
+                'file_name' => $export->file_name.'.gz',
+                'byte_size' => (int) (file_exists($newAbs) ? filesize($newAbs) : 0),
+            ]);
+
+            return $newAbs;
+        }
+
+        // ZIP : single-file archive replacing the original.
+        $base = preg_replace('/\.[^.]+$/', '', basename($absolutePath));
+        $zipAbs = dirname($absolutePath).'/'.$base.'.zip';
+
+        $zip = new \ZipArchive;
+        if ($zip->open($zipAbs, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
+            throw new \RuntimeException("Cannot open zip archive {$zipAbs}");
+        }
+        $zip->addFile($absolutePath, basename($absolutePath));
+        $zip->close();
+        @unlink($absolutePath);
+
+        $newName = preg_replace('/\.[^.]+$/', '.zip', $export->file_name) ?? ($export->file_name.'.zip');
+        $newRelative = dirname($relativePath).'/'.basename($zipAbs);
+
+        $export->update([
+            'file_path' => $newRelative,
+            'file_name' => $newName,
+            'byte_size' => (int) (file_exists($zipAbs) ? filesize($zipAbs) : 0),
+        ]);
+
+        return $zipAbs;
     }
 }
