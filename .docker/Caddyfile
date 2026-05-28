@@ -28,12 +28,11 @@
     # Honour the X-Forwarded-* headers so Laravel sees the right host/scheme.
     request_header >X-Real-IP {client_ip}
 
-    # PHP via FrankenPHP.
-    php_server {
-        try_files {path} {path}/ /index.php?{query}
-        # Disable file_server's default directory-browsing for safety.
-        browse off
-    }
+    # PHP via FrankenPHP. The bare `php_server` directive already wires
+    # the Laravel-style routing : try the exact file, fall back to
+    # /index.php?{query}. Don't add a custom try_files — adding {path}/
+    # there makes "/" match the public/ directory and triggers a 403.
+    php_server
 
     # Long-lived caches for the built assets.
     @assets path /build/* /fonts/*
