@@ -8,6 +8,12 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Idempotent : Docker volumes persist across deploys, so the table
+        // may already exist when the migrations log has been reset.
+        if (Schema::hasTable('table_operations')) {
+            return;
+        }
+
         Schema::create('table_operations', function (Blueprint $table) {
             $table->id();
             // 'web' (Breeze) or 'direct_db' (phpMyAdmin-style session)

@@ -8,6 +8,12 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Idempotent : Docker volumes persist across deploys, so the table
+        // may already exist when the migrations log has been reset.
+        if (Schema::hasTable('exports')) {
+            return;
+        }
+
         Schema::create('exports', function (Blueprint $table) {
             $table->id();
             $table->string('user_kind', 16);          // 'direct_db' since CP1 (kept for retro-compat, dropped in CP3)
