@@ -2,6 +2,17 @@
     x-data="{
         search: '',
         selected: null,
+        nodes: [],
+        edges: [],
+        layout: @js($layout),
+        setLayout(v) {
+            this.layout = v;
+            // 'dagre' is the default and dropped from the query string.
+            const u = new URL(location);
+            if (v === 'dagre') { u.searchParams.delete('layout'); }
+            else { u.searchParams.set('layout', v); }
+            history.replaceState({}, '', u);
+        },
         fit() {
             const cy = window.tfCytoscape?.instance($refs.diagram);
             cy?.fit(undefined, 30);
@@ -19,7 +30,8 @@
         }
     }"
     @cy:node-selected.window="selected = $event.detail"
-    @cy:node-deselected.window="selected = null">
+    @cy:node-deselected.window="selected = null"
+    @erd:generated.window="nodes = $event.detail.nodes; edges = $event.detail.edges; selected = null">
 
     {{-- Toolbar --}}
     <div class="shrink-0 px-4 py-2 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center gap-3 text-xs text-zinc-600 dark:text-zinc-400 flex-wrap">
@@ -43,7 +55,7 @@
 
         <label class="flex items-center gap-1">
             <span class="text-zinc-500 dark:text-zinc-400">{{ __('visualizer.layout') }}</span>
-            <select wire:model.live="layout" class="text-xs border border-zinc-300 dark:border-zinc-700 rounded px-1.5 py-1">
+            <select x-model="layout" @change="setLayout(layout)" class="text-xs border border-zinc-300 dark:border-zinc-700 rounded px-1.5 py-1">
                 <option value="dagre">{{ __('visualizer.layout_dagre') }}</option>
                 <option value="fcose">{{ __('visualizer.layout_fcose') }}</option>
                 <option value="cose">{{ __('visualizer.layout_cose') }}</option>
@@ -122,7 +134,7 @@
                 </div>
             @else
                 <div x-ref="diagram"
-                    x-cytoscape="{ nodes: $wire.nodes, edges: $wire.edges, layout: $wire.layout, highlight: search }"
+                    x-cytoscape="{ nodes: nodes, edges: edges, layout: layout, highlight: search }"
                     wire:ignore
                     class="absolute inset-0 h-full"></div>
             @endif

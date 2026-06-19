@@ -81,6 +81,7 @@
 
                                 @foreach ($tablesByDb[$db] ?? [] as $t)
                                     <button type="button"
+                                        wire:key="tbl-{{ $db }}-{{ $t->name }}"
                                         wire:click="selectTable('{{ $db }}', '{{ $t->name }}', {{ $t->schema ? "'".$t->schema."'" : 'null' }})"
                                         x-show="childVisible(@js($db), @js($t->name))"
                                         :class="matchesQuery(@js($t->name)) ? 'ring-1 ring-amber-400 dark:ring-amber-500 bg-amber-50/60 dark:bg-amber-900/20' : ''"
@@ -94,6 +95,7 @@
 
                                 @foreach ($viewsByDb[$db] ?? [] as $v)
                                     <button type="button"
+                                        wire:key="vw-{{ $db }}-{{ $v->name }}"
                                         wire:click="selectTable('{{ $db }}', '{{ $v->name }}', {{ $v->schema ? "'".$v->schema."'" : 'null' }})"
                                         x-show="childVisible(@js($db), @js($v->name))"
                                         :class="matchesQuery(@js($v->name)) ? 'ring-1 ring-amber-400 dark:ring-amber-500 bg-amber-50/60 dark:bg-amber-900/20' : ''"

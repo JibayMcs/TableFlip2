@@ -414,22 +414,23 @@ class TableData extends Component
         // so render is purely a display step — no re-execution, no risk of
         // re-triggering destructive guards or doubling history entries.
         if ($this->customSql !== '') {
-            [$customRowsForDisplay, $customTruncatedCells] = $this->capRowsForDisplay($this->customRows, $pkColumns);
-            $customEmpty = $this->detectEmptyColumns($customRowsForDisplay, $this->customColumns);
-            $customVisible = $this->resolveVisibleColumns($this->customColumns, $customEmpty, $pkColumns);
+            ['rows' => $customRows, 'columns' => $customColumns] = $this->customResult();
+            [$customRowsForDisplay, $customTruncatedCells] = $this->capRowsForDisplay($customRows, $pkColumns);
+            $customEmpty = $this->detectEmptyColumns($customRowsForDisplay, $customColumns);
+            $customVisible = $this->resolveVisibleColumns($customColumns, $customEmpty, $pkColumns);
 
             return view('livewire.explorer.table-data', [
                 'error' => null,
                 'mode' => 'custom',
                 'rows' => $customRowsForDisplay,
                 'truncatedCells' => $customTruncatedCells,
-                'columns' => $this->customColumns,
+                'columns' => $customColumns,
                 'visibleColumns' => $customVisible,
                 'emptyColumns' => $customEmpty,
                 'columnDefs' => $columnDefs,
                 'pkColumns' => $pkColumns,
                 'hasPrimaryKey' => $pkColumns !== [],
-                'total' => count($this->customRows),
+                'total' => count($customRows),
                 'totalIsEstimate' => false,
                 'totalPages' => 1,
                 'autocompleteSchema' => $autocompleteSchema,

@@ -30,23 +30,56 @@ trait HasSqlScratchPad
     /** @var array{durationMs: float, affectedRows: int, isWrite: bool}|null */
     public ?array $customSqlMeta = null;
 
-    /** Last result rows from the custom SQL execution. */
-    /** @var list<array<string, mixed>> */
-    public array $customRows = [];
-
-    /** @var list<string> */
-    public array $customColumns = [];
-
     /** Holds the SQL awaiting confirmation when the destructive detector fires. */
     public ?array $pendingSqlDestructive = null;
+
+    /**
+     * Custom result rows / columns are cached server-side (keyed by the
+     * Livewire component id) instead of living in public properties. A custom
+     * SELECT can return hundreds of rows ; keeping them out of the snapshot
+     * avoids serialising megabytes into the DOM and echoing them up on every
+     * unrelated round-trip (inline edit, bulk select…). TTL is generous —
+     * they're dropped on clearCustomSql() anyway.
+     */
+    private function customResultCacheKey(): string
+    {
+        return 'tableflip:tabledata:custom:'.$this->getId();
+    }
+
+    /**
+     * @return array{rows: list<array<string, mixed>>, columns: list<string>}
+     */
+    protected function customResult(): array
+    {
+        $cached = \Illuminate\Support\Facades\Cache::get($this->customResultCacheKey());
+
+        return is_array($cached) ? $cached : ['rows' => [], 'columns' => []];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @param  list<string>  $columns
+     */
+    private function storeCustomResult(array $rows, array $columns): void
+    {
+        \Illuminate\Support\Facades\Cache::put(
+            $this->customResultCacheKey(),
+            ['rows' => $rows, 'columns' => $columns],
+            now()->addHours(2),
+        );
+    }
+
+    private function forgetCustomResult(): void
+    {
+        \Illuminate\Support\Facades\Cache::forget($this->customResultCacheKey());
+    }
 
     public function clearCustomSql(): void
     {
         $this->customSql = '';
         $this->customSqlError = null;
         $this->customSqlMeta = null;
-        $this->customRows = [];
-        $this->customColumns = [];
+        $this->forgetCustomResult();
         $this->pendingSqlDestructive = null;
         // Notify the editor so it visually drops back to the seed query.
         $this->dispatch('table-data-sql-set', sql: $this->scratchPadSeedSql());
@@ -156,11 +189,9 @@ trait HasSqlScratchPad
         // the meta to show "Affected: N" in the result area.
         if ($result->succeeded() && ! $result->isWrite) {
             $rows = is_array($result->rows) ? $result->rows : iterator_to_array($result->rows);
-            $this->customRows = $rows;
-            $this->customColumns = $result->columns;
+            $this->storeCustomResult($rows, $result->columns);
         } else {
-            $this->customRows = [];
-            $this->customColumns = [];
+            $this->forgetCustomResult();
         }
 
         // Reset bulk selection — different rows are about to be displayed.

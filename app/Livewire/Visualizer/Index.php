@@ -30,14 +30,14 @@ class Index extends Component
     #[Url(as: 'compact', except: false)]
     public bool $compact = false;
 
-    #[Url(as: 'layout', except: 'dagre')]
+    /**
+     * Layout algorithm for the client-side Cytoscape render. NOT a #[Url]
+     * property and never read server-side : switching it is pure client
+     * work (the directive re-runs cy.layout()), so Alpine owns it and the
+     * `?layout=` query param via history.replaceState. Seeded from the
+     * request query in mount() for deeplinks.
+     */
     public string $layout = 'dagre';
-
-    /** @var list<array<string, mixed>> */
-    public array $nodes = [];
-
-    /** @var list<array<string, mixed>> */
-    public array $edges = [];
 
     public ?string $error = null;
 
@@ -59,13 +59,18 @@ class Index extends Component
         if ($this->database === null) {
             $this->database = $current->defaultDatabase();
         }
+
+        // Seed the layout from the query string so deeplinks keep the choice;
+        // after mount the Alpine toggle owns it (no server round-trip).
+        $queryLayout = (string) request()->query('layout', '');
+        if (in_array($queryLayout, ['dagre', 'fcose', 'cose'], true)) {
+            $this->layout = $queryLayout;
+        }
     }
 
     public function generate(CurrentConnection $current, ErdGenerator $generator): void
     {
         $this->error = null;
-        $this->nodes = [];
-        $this->edges = [];
         $this->tableCount = 0;
         $this->relationshipCount = 0;
         $this->skippedTables = [];
@@ -90,11 +95,15 @@ class Index extends Component
             return;
         }
 
-        $this->nodes = $result['nodes'];
-        $this->edges = $result['edges'];
         $this->tableCount = $result['tableCount'];
         $this->relationshipCount = $result['relationshipCount'];
         $this->skippedTables = $result['skippedTables'];
+
+        // Push the (potentially multi-MB) graph to the client as a one-shot
+        // browser event instead of a public property. Keeping nodes/edges out
+        // of the Livewire snapshot avoids carrying them in the DOM and echoing
+        // them on every subsequent round-trip.
+        $this->dispatch('erd:generated', nodes: $result['nodes'], edges: $result['edges']);
     }
 
     public function render(CurrentConnection $current, SchemaIntrospectionService $schema): View

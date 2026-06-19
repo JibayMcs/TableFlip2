@@ -39,6 +39,24 @@ class Editor extends Component
     /** When set, the destructive confirmation modal is shown. */
     public ?array $pendingDestructive = null;
 
+    /**
+     * Memoised list of database names for the picker. Built once (cheap
+     * payload : just names) so every history-search keystroke / query run
+     * doesn't re-hit the server with SHOW DATABASES.
+     *
+     * @var list<string>
+     */
+    public array $databasesList = [];
+
+    /**
+     * The editor's autocomplete schema is only consumed by the (wire:ignore)
+     * CodeMirror config on first paint ; later updates are pushed via the
+     * `sql-editor-set-schema` event from changeDatabase(). This flag lets
+     * render() skip the expensive tablesWithColumns() introspection on every
+     * subsequent round-trip.
+     */
+    public bool $editorBooted = false;
+
     public function mount(CurrentConnection $current): void
     {
         if ($current->driver() === null) {
@@ -275,23 +293,32 @@ class Editor extends Component
         DestructiveSqlDetector $detector,
     ): View {
         $driver = $current->driver();
-        $databases = [];
         $schema = [];
         $dialect = 'mysql';
 
         if ($driver !== null) {
-            try {
-                $databases = $schemaService->databases($driver);
-            } catch (Throwable) {
-                $databases = [];
+            // Database list : built once, then reused from the public prop.
+            if ($this->databasesList === []) {
+                try {
+                    $this->databasesList = $schemaService->databases($driver);
+                } catch (Throwable) {
+                    $this->databasesList = [];
+                }
             }
-            $schema = $this->buildSchema($current, $schemaService);
+
+            // Autocomplete schema : only needed for the initial editor config.
+            // Subsequent DB switches push via the sql-editor-set-schema event.
+            if (! $this->editorBooted) {
+                $schema = $this->buildSchema($current, $schemaService);
+                $this->editorBooted = true;
+            }
+
             $dialect = $this->dialectName($current);
         }
 
         return view('livewire.sql.editor', [
             'currentLabel' => $current->label(),
-            'databases' => $databases,
+            'databases' => $this->databasesList,
             'schema' => $schema,
             'dialect' => $dialect,
             'history' => $history->recent($this->historySearch),

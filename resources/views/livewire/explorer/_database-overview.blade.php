@@ -134,7 +134,7 @@
         <div x-show="overviewView === 'grid'" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             @foreach ($tables as $t)
                 @php $checked = in_array($t['name'], $bulkSelected, true); @endphp
-                <div class="group relative bg-white dark:bg-zinc-900 border rounded-md transition-colors {{ $checked ? 'border-amber-400 dark:border-amber-500 ring-1 ring-amber-400 dark:ring-amber-500' : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700' }}">
+                <div wire:key="grid-{{ $t['name'] }}" class="group relative bg-white dark:bg-zinc-900 border rounded-md transition-colors {{ $checked ? 'border-amber-400 dark:border-amber-500 ring-1 ring-amber-400 dark:ring-amber-500' : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700' }}">
                     {{-- Click overlay for navigation (excludes the checkbox + action buttons) --}}
                     <button type="button" wire:click="selectTable('{{ $selectedDatabase }}', {{ \Illuminate\Support\Js::from($t['name']) }}, {{ $t['schema'] ? "'".$t['schema']."'" : 'null' }})"
                         class="absolute inset-0 z-0 cursor-pointer rounded-md focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-300"
@@ -188,7 +188,7 @@
                 <tbody>
                     @foreach ($tables as $t)
                         @php $checked = in_array($t['name'], $bulkSelected, true); @endphp
-                        <tr class="border-b border-zinc-100 dark:border-zinc-800 last:border-0 cursor-pointer {{ $checked ? 'bg-amber-50/60 dark:bg-amber-900/20' : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/50' }}"
+                        <tr wire:key="list-{{ $t['name'] }}" class="border-b border-zinc-100 dark:border-zinc-800 last:border-0 cursor-pointer {{ $checked ? 'bg-amber-50/60 dark:bg-amber-900/20' : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/50' }}"
                             wire:click="selectTable('{{ $selectedDatabase }}', {{ \Illuminate\Support\Js::from($t['name']) }}, {{ $t['schema'] ? "'".$t['schema']."'" : 'null' }})">
                             <td class="px-3 py-2" wire:click.stop>
                                 <input type="checkbox" @checked($checked)
