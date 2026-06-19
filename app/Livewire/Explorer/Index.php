@@ -43,8 +43,16 @@ class Index extends Component
 
     public ?string $rowCountError = null;
 
-    /** Grid or list view for the database overview panel. URL-deeplinked. */
-    #[Url(as: 'view', except: 'grid')]
+    /**
+     * Grid or list view for the database overview panel.
+     *
+     * NOT a #[Url] property : the toggle is pure client-side Alpine, which
+     * owns the `?view=` query param via history.replaceState. Were this
+     * #[Url], every unrelated Livewire round-trip (e.g. a bulk-select)
+     * would re-assert the server value and clobber the client's choice.
+     * We seed it from the request query in mount() so deeplinks still
+     * work on first load.
+     */
     public string $overviewView = 'grid';
 
     /**
@@ -73,6 +81,12 @@ class Index extends Component
             $this->redirect(route('login'), navigate: true);
 
             return;
+        }
+
+        // Seed the overview view from the query string so deeplinks /
+        // reloads keep the choice. After mount, the Alpine toggle owns it.
+        if (request()->query('view') === 'list') {
+            $this->overviewView = 'list';
         }
 
         // Default to the connection's preferred database only when no URL state.
@@ -199,11 +213,6 @@ class Index extends Component
     }
 
     // -- Database overview : bulk actions -------------------------------
-
-    public function setOverviewView(string $mode): void
-    {
-        $this->overviewView = in_array($mode, ['grid', 'list'], true) ? $mode : 'grid';
-    }
 
     public function toggleBulk(string $tableName): void
     {

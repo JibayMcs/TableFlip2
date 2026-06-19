@@ -14,7 +14,19 @@
     $totals = $overview['totals'] ?? ['count' => 0, 'rows' => 0, 'size' => 0];
 @endphp
 
-<div>
+<div x-data="{
+        overviewView: @js($overviewView),
+        setView(v) {
+            this.overviewView = v;
+            // Persist in the URL client-side so a reload / deeplink keeps
+            // the choice, without a Livewire round-trip ('grid' is the
+            // default and dropped from the query string).
+            const u = new URL(location);
+            if (v === 'grid') { u.searchParams.delete('view'); }
+            else { u.searchParams.set('view', v); }
+            history.replaceState({}, '', u);
+        },
+    }">
     {{-- Breadcrumb --}}
     <nav class="text-xs text-zinc-500 dark:text-zinc-400 mb-4 flex items-center gap-1">
         <span>{{ $currentLabel }}</span>
@@ -43,11 +55,12 @@
                 {{ __('exports.database.title_segment') }}
             </a>
 
-            {{-- View mode toggle --}}
+            {{-- View mode toggle : pure Alpine, no server round-trip. --}}
             <div class="inline-flex border border-zinc-300 dark:border-zinc-700 rounded-md overflow-hidden">
-                <button type="button" wire:click="setOverviewView('grid')"
+                <button type="button" @click="setView('grid')"
                     x-tooltip.bottom="{{ __('explorer.overview.grid_view') }}"
-                    class="px-2 py-1 text-xs {{ $overviewView === 'grid' ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800' }}">
+                    class="px-2 py-1 text-xs"
+                    :class="overviewView === 'grid' ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800'">
                     <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <rect x="3" y="3" width="7" height="7" rx="1"/>
                         <rect x="14" y="3" width="7" height="7" rx="1"/>
@@ -55,9 +68,10 @@
                         <rect x="14" y="14" width="7" height="7" rx="1"/>
                     </svg>
                 </button>
-                <button type="button" wire:click="setOverviewView('list')"
+                <button type="button" @click="setView('list')"
                     x-tooltip.bottom="{{ __('explorer.overview.list_view') }}"
-                    class="px-2 py-1 text-xs {{ $overviewView === 'list' ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800' }}">
+                    class="px-2 py-1 text-xs"
+                    :class="overviewView === 'list' ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800'">
                     <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <line x1="8" y1="6" x2="21" y2="6"/>
                         <line x1="8" y1="12" x2="21" y2="12"/>
@@ -113,9 +127,11 @@
         <div class="rounded-md border border-dashed border-zinc-300 dark:border-zinc-700 p-8 text-center text-sm text-zinc-500 dark:text-zinc-400">
             {{ __('explorer.overview.no_tables') }}
         </div>
-    @elseif ($overviewView === 'grid')
-        {{-- Grid view : cards --}}
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+    @else
+        {{-- Grid view : cards. Both layouts are rendered and toggled by
+            Alpine x-show so switching is instant and the inner wire: actions
+            (selectTable / toggleBulk) stay bound. --}}
+        <div x-show="overviewView === 'grid'" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             @foreach ($tables as $t)
                 @php $checked = in_array($t['name'], $bulkSelected, true); @endphp
                 <div class="group relative bg-white dark:bg-zinc-900 border rounded-md transition-colors {{ $checked ? 'border-amber-400 dark:border-amber-500 ring-1 ring-amber-400 dark:ring-amber-500' : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700' }}">
@@ -156,9 +172,9 @@
                 </div>
             @endforeach
         </div>
-    @else
+
         {{-- List view : compact table --}}
-        <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md overflow-hidden">
+        <div x-show="overviewView === 'list'" x-cloak class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md overflow-hidden">
             <table class="w-full text-sm">
                 <thead class="text-left text-xs uppercase text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-800">
                     <tr>

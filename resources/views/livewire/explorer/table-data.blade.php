@@ -10,10 +10,16 @@
             'executeEvent' => 'table-data-sql-execute',
         ]);
     @endphp
-    <div class="border border-zinc-200 dark:border-zinc-800 rounded-md bg-white dark:bg-zinc-900 overflow-hidden">
-        <button type="button" wire:click="toggleSqlPad"
+    {{-- Collapsible state is pure client UI : Alpine keeps it off the server.
+        Seeded open when a custom query is already active so the editor that
+        drives the table is visible. The panel stays mounted (x-show, not
+        x-if) so the embedded CodeMirror inits once with correct dimensions
+        and the inner wire: actions bind normally. --}}
+    <div x-data="{ sqlPadOpen: @js($customSql !== '') }"
+        class="border border-zinc-200 dark:border-zinc-800 rounded-md bg-white dark:bg-zinc-900 overflow-hidden">
+        <button type="button" @click="sqlPadOpen = ! sqlPadOpen"
             class="w-full px-3 py-2 flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:bg-zinc-950">
-            <svg class="size-3 text-zinc-400 dark:text-zinc-500 transition-transform {{ $sqlPadOpen ? 'rotate-90' : '' }}"
+            <svg class="size-3 text-zinc-400 dark:text-zinc-500 transition-transform" :class="sqlPadOpen ? 'rotate-90' : ''"
                 fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
             </svg>
@@ -26,7 +32,7 @@
             @endif
         </button>
 
-        @if ($sqlPadOpen)
+        <div x-show="sqlPadOpen" x-cloak>
             <div class="border-t border-zinc-200 dark:border-zinc-800">
                 <div class="flex gap-px items-stretch bg-zinc-200">
                     <div class="flex-1 min-w-0 h-40 bg-white dark:bg-zinc-900"
@@ -73,7 +79,7 @@
                     </div>
                 @endif
             </div>
-        @endif
+        </div>
     </div>
 
     {{-- Custom mode banner --}}

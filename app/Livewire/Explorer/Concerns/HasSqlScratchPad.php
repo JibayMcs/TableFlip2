@@ -22,8 +22,6 @@ use Throwable;
  */
 trait HasSqlScratchPad
 {
-    public bool $sqlPadOpen = false;
-
     /** Active custom SQL — when non-empty, drives the table content. */
     public string $customSql = '';
 
@@ -41,11 +39,6 @@ trait HasSqlScratchPad
 
     /** Holds the SQL awaiting confirmation when the destructive detector fires. */
     public ?array $pendingSqlDestructive = null;
-
-    public function toggleSqlPad(): void
-    {
-        $this->sqlPadOpen = ! $this->sqlPadOpen;
-    }
 
     public function clearCustomSql(): void
     {
