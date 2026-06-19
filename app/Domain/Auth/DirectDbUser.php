@@ -61,4 +61,22 @@ final class DirectDbUser implements Authenticatable
 
         return $cfg->hasDatabase() ? "{$base}/{$cfg->database}" : $base;
     }
+
+    /**
+     * Compact label for tight spaces (navbar) : drops the port and, for
+     * SQLite, keeps only the file basename. The full {@see label()} is shown
+     * as a tooltip alongside it.
+     */
+    public function shortLabel(): string
+    {
+        $cfg = $this->config;
+
+        if ($cfg->driver === 'sqlite') {
+            return 'sqlite:'.basename($cfg->database);
+        }
+
+        $base = "{$cfg->username}@{$cfg->host}";
+
+        return $cfg->hasDatabase() ? "{$base}/{$cfg->database}" : $base;
+    }
 }

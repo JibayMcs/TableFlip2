@@ -87,8 +87,9 @@
                                 </div>
                             </div>
 
-                            <span class="text-zinc-500 dark:text-zinc-400 font-mono text-xs">
-                                {{ auth('db_session')->user()->label() }}
+                            <span x-tooltip.bottom="{{ auth('db_session')->user()->label() }}"
+                                class="hidden lg:inline-block max-w-[16rem] truncate align-middle text-zinc-500 dark:text-zinc-400 font-mono text-xs cursor-default">
+                                {{ auth('db_session')->user()->shortLabel() }}
                             </span>
                             <form method="POST" action="{{ route('logout') }}" class="inline">
                                 @csrf

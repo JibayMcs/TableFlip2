@@ -40,6 +40,7 @@ return [
         'grid_view' => 'Grid view',
         'list_view' => 'List view',
         'no_tables' => 'This database is empty.',
+        'no_filter_match' => 'No table matches',
         'size' => 'Size',
         'selected' => 'selected',
         'truncate_selected' => 'Truncate selected',

@@ -16,6 +16,8 @@
 
 <div x-data="{
         overviewView: @js($overviewView),
+        tableFilter: '',
+        tableNames: @js(array_values(array_map(static fn ($t) => strtolower((string) $t['name']), $tables))),
         setView(v) {
             this.overviewView = v;
             // Persist in the URL client-side so a reload / deeplink keeps
@@ -25,6 +27,14 @@
             if (v === 'grid') { u.searchParams.delete('view'); }
             else { u.searchParams.set('view', v); }
             history.replaceState({}, '', u);
+        },
+        matchesFilter(name) {
+            const q = this.tableFilter.trim().toLowerCase();
+            return q === '' || String(name).toLowerCase().includes(q);
+        },
+        get filteredCount() {
+            const q = this.tableFilter.trim().toLowerCase();
+            return q === '' ? this.tableNames.length : this.tableNames.filter(n => n.includes(q)).length;
         },
     }">
     {{-- Breadcrumb --}}
@@ -46,6 +56,17 @@
         </div>
 
         <div class="flex items-center gap-2">
+            {{-- Dynamic table filter : pure Alpine, instant, no server round-trip. --}}
+            <div class="relative">
+                <svg class="size-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-zinc-400 dark:text-zinc-500 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <input type="search" x-model="tableFilter"
+                    placeholder="{{ __('explorer.overview.filter_placeholder') }}"
+                    x-on:keydown.escape="tableFilter = ''"
+                    class="w-44 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 pl-7 pr-2 py-1.5 text-xs focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900" />
+            </div>
+
             <a href="{{ route('exports.database', ['db' => $selectedDatabase]) }}" wire:navigate
                 x-tooltip.bottom="{{ __('exports.database.title_segment') }}"
                 class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-zinc-300 dark:border-zinc-700 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800">
@@ -128,13 +149,21 @@
             {{ __('explorer.overview.no_tables') }}
         </div>
     @else
+        {{-- Empty state when the live filter matches nothing. --}}
+        <div x-show="filteredCount === 0" x-cloak
+            class="rounded-md border border-dashed border-zinc-300 dark:border-zinc-700 p-8 text-center text-sm text-zinc-500 dark:text-zinc-400">
+            {{ __('explorer.overview.no_filter_match') }} <span class="font-mono" x-text="tableFilter"></span>
+        </div>
+
         {{-- Grid view : cards. Both layouts are rendered and toggled by
             Alpine x-show so switching is instant and the inner wire: actions
             (selectTable / toggleBulk) stay bound. --}}
-        <div x-show="overviewView === 'grid'" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+        <div x-show="overviewView === 'grid' && filteredCount > 0" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             @foreach ($tables as $t)
                 @php $checked = in_array($t['name'], $bulkSelected, true); @endphp
-                <div wire:key="grid-{{ $t['name'] }}" class="group relative bg-white dark:bg-zinc-900 border rounded-md transition-colors {{ $checked ? 'border-amber-400 dark:border-amber-500 ring-1 ring-amber-400 dark:ring-amber-500' : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700' }}">
+                <div wire:key="grid-{{ $t['name'] }}"
+                    x-show="matchesFilter(@js($t['name']))"
+                    class="group relative bg-white dark:bg-zinc-900 border rounded-md transition-colors {{ $checked ? 'border-amber-400 dark:border-amber-500 ring-1 ring-amber-400 dark:ring-amber-500' : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700' }}">
                     {{-- Click overlay for navigation (excludes the checkbox + action buttons) --}}
                     <button type="button" wire:click="selectTable('{{ $selectedDatabase }}', {{ \Illuminate\Support\Js::from($t['name']) }}, {{ $t['schema'] ? "'".$t['schema']."'" : 'null' }})"
                         class="absolute inset-0 z-0 cursor-pointer rounded-md focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-300"
@@ -174,7 +203,7 @@
         </div>
 
         {{-- List view : compact table --}}
-        <div x-show="overviewView === 'list'" x-cloak class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md overflow-hidden">
+        <div x-show="overviewView === 'list' && filteredCount > 0" x-cloak class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md overflow-hidden">
             <table class="w-full text-sm">
                 <thead class="text-left text-xs uppercase text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-800">
                     <tr>
@@ -188,7 +217,9 @@
                 <tbody>
                     @foreach ($tables as $t)
                         @php $checked = in_array($t['name'], $bulkSelected, true); @endphp
-                        <tr wire:key="list-{{ $t['name'] }}" class="border-b border-zinc-100 dark:border-zinc-800 last:border-0 cursor-pointer {{ $checked ? 'bg-amber-50/60 dark:bg-amber-900/20' : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/50' }}"
+                        <tr wire:key="list-{{ $t['name'] }}"
+                            x-show="matchesFilter(@js($t['name']))"
+                            class="border-b border-zinc-100 dark:border-zinc-800 last:border-0 cursor-pointer {{ $checked ? 'bg-amber-50/60 dark:bg-amber-900/20' : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/50' }}"
                             wire:click="selectTable('{{ $selectedDatabase }}', {{ \Illuminate\Support\Js::from($t['name']) }}, {{ $t['schema'] ? "'".$t['schema']."'" : 'null' }})">
                             <td class="px-3 py-2" wire:click.stop>
                                 <input type="checkbox" @checked($checked)

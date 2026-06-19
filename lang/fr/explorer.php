@@ -40,6 +40,7 @@ return [
         'grid_view' => 'Affichage grille',
         'list_view' => 'Affichage liste',
         'no_tables' => 'Cette base est vide.',
+        'no_filter_match' => 'Aucune table ne correspond à',
         'size' => 'Taille',
         'selected' => 'sélectionnée(s)',
         'truncate_selected' => 'Vider la sélection',
