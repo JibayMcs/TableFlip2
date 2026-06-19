@@ -1,6 +1,40 @@
-<div class="h-full flex">
-    {{-- Main column : tabs + editor + result --}}
-    <section class="flex-1 min-w-0 flex flex-col">
+<div class="h-full flex" wire:init="loadSchema"
+    x-data="{
+        historyOpen: localStorage.getItem('tableflip:sql:historyOpen') !== '0',
+        toggleHistory() {
+            this.historyOpen = ! this.historyOpen;
+            localStorage.setItem('tableflip:sql:historyOpen', this.historyOpen ? '1' : '0');
+        },
+    }">
+    {{-- Main column : tabs + editor + result. The editor fills the remaining
+        space (flex-1) while the result panel has a user-resizable height,
+        dragged via the splitter handle and persisted in localStorage. --}}
+    <section class="flex-1 min-w-0 flex flex-col"
+        x-data="{
+            resultH: Math.max(80, Number(localStorage.getItem('tableflip:sql:resultH')) || 280),
+            dragging: false,
+            startDrag(e) {
+                e.preventDefault();
+                this.dragging = true;
+                const startY = e.clientY;
+                const startH = this.resultH;
+                const onMove = (ev) => {
+                    // Drag up = taller result + shorter editor, and vice-versa.
+                    const next = startH - (ev.clientY - startY);
+                    this.resultH = Math.max(80, Math.min(next, window.innerHeight - 220));
+                };
+                const onUp = () => {
+                    this.dragging = false;
+                    document.body.style.userSelect = '';
+                    localStorage.setItem('tableflip:sql:resultH', String(Math.round(this.resultH)));
+                    window.removeEventListener('pointermove', onMove);
+                    window.removeEventListener('pointerup', onUp);
+                };
+                document.body.style.userSelect = 'none';
+                window.addEventListener('pointermove', onMove);
+                window.addEventListener('pointerup', onUp);
+            },
+        }">
 
         {{-- Top bar : connection + database picker --}}
         <div class="shrink-0 px-4 py-2 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center gap-3 text-xs text-zinc-600 dark:text-zinc-400">
@@ -8,7 +42,7 @@
             <span class="text-zinc-300 dark:text-zinc-700">/</span>
             <label class="flex items-center gap-1">
                 <span class="text-zinc-500 dark:text-zinc-400">Database</span>
-                <select wire:model.live="currentDatabase" wire:change="changeDatabase($event.target.value)"
+                <select wire:model="currentDatabase" wire:change="changeDatabase($event.target.value)"
                     class="text-xs border border-zinc-300 dark:border-zinc-700 rounded px-1.5 py-1">
                     <option value="">— pick —</option>
                     @foreach ($databases as $db)
@@ -39,6 +73,16 @@
                 class="px-3 py-1.5 text-xs text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:text-zinc-100 hover:bg-zinc-50 dark:bg-zinc-950">+ New tab</button>
 
             <div class="ml-auto pr-3 flex items-center gap-2">
+                {{-- Toggle the history sidebar (pure client state, persisted). --}}
+                <button type="button" @click="toggleHistory()"
+                    x-tooltip.bottom="Toggle history"
+                    class="size-8 inline-flex items-center justify-center rounded-md border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-50 dark:bg-zinc-950 transition-colors"
+                    :class="historyOpen ? 'text-zinc-900 dark:text-zinc-100 bg-zinc-100 dark:bg-zinc-800' : 'text-zinc-600 dark:text-zinc-400'">
+                    <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                        <line x1="15" y1="3" x2="15" y2="21"/>
+                    </svg>
+                </button>
                 <button type="button" wire:click="openExportLauncher"
                     x-tooltip.bottom="Export current query"
                     class="size-8 inline-flex items-center justify-center rounded-md border border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:text-zinc-100 hover:bg-zinc-50 dark:bg-zinc-950 transition-colors">
@@ -87,8 +131,17 @@
                 class="h-full"></div>
         </div>
 
+        {{-- Resize handle : drag to grow/shrink the result panel. --}}
+        <div @pointerdown="startDrag"
+            x-tooltip.top="Drag to resize"
+            class="shrink-0 h-1.5 cursor-row-resize bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-600 transition-colors flex items-center justify-center group"
+            :class="dragging ? 'bg-zinc-400 dark:bg-zinc-500' : ''">
+            <div class="h-0.5 w-8 rounded-full bg-zinc-400 dark:bg-zinc-600 group-hover:bg-zinc-500 dark:group-hover:bg-zinc-400"></div>
+        </div>
+
         {{-- Result --}}
-        <div class="shrink-0 max-h-[40vh] overflow-auto border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+        <div class="shrink-0 overflow-auto border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900"
+            :style="{ height: resultH + 'px' }">
             @if ($lastResult === null)
                 <div class="px-4 py-8 text-center text-xs text-zinc-400 dark:text-zinc-500">
                     Run a query to see results.
@@ -104,11 +157,20 @@
                 </div>
             @else
                 <div class="px-3 py-1.5 text-xs text-zinc-500 dark:text-zinc-400 border-b border-zinc-100 dark:border-zinc-800 flex items-center gap-3 bg-zinc-50 dark:bg-zinc-950">
-                    <span><span class="font-mono font-medium text-zinc-700 dark:text-zinc-300">{{ number_format(count($lastResult['rows'])) }}</span> rows</span>
+                    <span><span class="font-mono font-medium text-zinc-700 dark:text-zinc-300">{{ number_format($lastResult['rowCount']) }}</span> rows</span>
                     <span class="text-zinc-300 dark:text-zinc-700">·</span>
                     <span>{{ number_format($lastResult['durationMs'], 1) }} ms</span>
+                    @if (! empty($lastResult['truncated']))
+                        <span class="text-zinc-300 dark:text-zinc-700">·</span>
+                        <span class="inline-flex items-center gap-1 rounded bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">
+                            <svg class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            Preview truncated — showing first {{ number_format($lastResult['rowCount']) }} rows. Use Export for the full set.
+                        </span>
+                    @endif
                 </div>
-                @if (count($lastResult['rows']) === 0)
+                @if (count($resultRows) === 0)
                     <div class="px-4 py-6 text-center text-xs text-zinc-400 dark:text-zinc-500">Empty result set.</div>
                 @else
                     <table class="w-full text-xs border-collapse">
@@ -120,7 +182,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            @foreach ($lastResult['rows'] as $row)
+                            @foreach ($resultRows as $row)
                                 <tr class="border-b border-zinc-100 dark:border-zinc-800 last:border-0 hover:bg-zinc-50 dark:bg-zinc-950">
                                     @foreach ($lastResult['columns'] as $col)
                                         <td class="px-3 py-1 font-mono align-top">
@@ -140,22 +202,32 @@
         </div>
     </section>
 
-    {{-- Right sidebar : history --}}
-    <aside class="w-72 shrink-0 border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-y-auto flex flex-col">
+    {{-- Right sidebar : history. Collapsible (pure client state, persisted). --}}
+    <aside x-show="historyOpen" x-cloak
+        class="w-72 shrink-0 border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-y-auto flex flex-col">
         <div class="sticky top-0 z-10 bg-white dark:bg-zinc-900 border-b border-zinc-100 dark:border-zinc-800 p-3">
             <div class="flex items-center justify-between mb-2">
                 <div class="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400 font-semibold">History</div>
-                @if ($history->isNotEmpty())
-                    <button type="button" wire:click="clearAllHistory"
-                        wire:confirm="Delete all your query history?"
-                        x-tooltip.left="Clear all history"
-                        class="text-zinc-400 dark:text-zinc-500 hover:text-rose-600 p-1 -m-1 rounded">
+                <div class="flex items-center gap-1">
+                    @if ($history->isNotEmpty())
+                        <button type="button" wire:click="clearAllHistory"
+                            wire:confirm="Delete all your query history?"
+                            x-tooltip.left="Clear all history"
+                            class="text-zinc-400 dark:text-zinc-500 hover:text-rose-600 p-1 -m-1 rounded">
+                            <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="3 6 5 6 21 6"/>
+                                <path d="M19 6l-2 14a2 2 0 01-2 2H9a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                            </svg>
+                        </button>
+                    @endif
+                    <button type="button" @click="toggleHistory()"
+                        x-tooltip.left="Collapse history"
+                        class="text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200 p-1 -m-1 rounded">
                         <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="3 6 5 6 21 6"/>
-                            <path d="M19 6l-2 14a2 2 0 01-2 2H9a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                            <path d="M9 6l6 6-6 6"/>
                         </svg>
                     </button>
-                @endif
+                </div>
             </div>
             <input type="search" wire:model.live.debounce.300ms="historySearch" placeholder="Search…"
                 class="w-full rounded-md border border-zinc-300 dark:border-zinc-700 px-2.5 py-1.5 text-xs" />

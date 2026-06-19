@@ -123,8 +123,12 @@ interface DatabaseDriverInterface
 
     /**
      * @param  array<int|string, mixed>  $bindings
+     * @param  ?int  $maxLobBytes  cap, in bytes, on large LOB/binary columns for
+     *                             a preview read (drivers that can, truncate
+     *                             them server-side). null = no cap (full data,
+     *                             used by exports).
      */
-    public function select(string $sql, array $bindings = []): QueryResult;
+    public function select(string $sql, array $bindings = [], ?int $maxLobBytes = null): QueryResult;
 
     /**
      * Yield rows one by one without buffering the whole result set in memory.
@@ -132,9 +136,10 @@ interface DatabaseDriverInterface
      * huge SELECT.
      *
      * @param  array<int|string, mixed>  $bindings
+     * @param  ?int  $maxLobBytes  see {@see select()} — null for exports.
      * @return \Generator<int, array<string, mixed>>
      */
-    public function streamSelect(string $sql, array $bindings = []): \Generator;
+    public function streamSelect(string $sql, array $bindings = [], ?int $maxLobBytes = null): \Generator;
 
     /**
      * @param  array<int|string, mixed>  $bindings

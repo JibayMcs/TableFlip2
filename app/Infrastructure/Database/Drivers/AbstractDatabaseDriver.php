@@ -137,14 +137,20 @@ abstract class AbstractDatabaseDriver implements DatabaseDriverInterface
         return strtolower(($table->schema ?? '').'.'.$table->name);
     }
 
-    public function select(string $sql, array $bindings = []): QueryResult
+    public function select(string $sql, array $bindings = [], ?int $maxLobBytes = null): QueryResult
     {
         $start = microtime(true);
+        $pdo = $this->connection()->getPdo();
+        $capped = $this->applyLobByteCap($pdo, $maxLobBytes);
 
         try {
             $rows = $this->connection()->select($sql, $bindings);
         } catch (Throwable $e) {
             throw new QueryExecutionException($e->getMessage(), $sql, $bindings, $e);
+        } finally {
+            if ($capped) {
+                $this->clearLobByteCap($pdo);
+            }
         }
 
         $elapsed = (microtime(true) - $start) * 1000;
@@ -159,23 +165,75 @@ abstract class AbstractDatabaseDriver implements DatabaseDriverInterface
         );
     }
 
-    public function streamSelect(string $sql, array $bindings = []): \Generator
+    public function streamSelect(string $sql, array $bindings = [], ?int $maxLobBytes = null): \Generator
     {
+        $pdo = $this->connection()->getPdo();
+
+        // On MySQL/MariaDB, mysqlnd buffers the WHOLE result set in PHP memory
+        // by default — a SELECT on a 33 GB table OOMs the worker before we get
+        // to cap anything. Switch to an unbuffered (server-side) cursor so rows
+        // are pulled one at a time and the caller can stop early. Restored in
+        // the finally so the shared connection goes back to buffered mode.
+        $unbuffer = in_array($this->getDriverName(), ['mysql', 'mariadb'], true)
+            && defined('PDO::MYSQL_ATTR_USE_BUFFERED_QUERY');
+        $capped = false;
+
         try {
-            $pdo = $this->connection()->getPdo();
+            if ($unbuffer) {
+                $pdo->setAttribute(\PDO::MYSQL_ATTR_USE_BUFFERED_QUERY, false);
+            }
+            // Bound LOB columns server-side (SQL Server SET TEXTSIZE) so a
+            // multi-MB varbinary cell can't OOM us at fetch() — PDO has to
+            // materialise a whole cell value before yielding it.
+            $capped = $this->applyLobByteCap($pdo, $maxLobBytes);
             $stmt = $pdo->prepare($sql);
             $stmt->execute($bindings);
         } catch (Throwable $e) {
+            if ($unbuffer) {
+                $pdo->setAttribute(\PDO::MYSQL_ATTR_USE_BUFFERED_QUERY, true);
+            }
+            if ($capped) {
+                $this->clearLobByteCap($pdo);
+            }
             throw new QueryExecutionException($e->getMessage(), $sql, $bindings, $e);
         }
 
-        // PDO::FETCH_ASSOC returns one row at a time on each fetch() call —
-        // no buffering of the whole result set in PHP-land.
-        while (($row = $stmt->fetch(\PDO::FETCH_ASSOC)) !== false) {
-            yield $row;
+        try {
+            // PDO::FETCH_ASSOC returns one row at a time on each fetch() call.
+            while (($row = $stmt->fetch(\PDO::FETCH_ASSOC)) !== false) {
+                yield $row;
+            }
+        } finally {
+            // Runs on normal completion AND when the caller breaks early
+            // (generator close) — frees the cursor and restores buffering/caps.
+            $stmt->closeCursor();
+            if ($unbuffer) {
+                $pdo->setAttribute(\PDO::MYSQL_ATTR_USE_BUFFERED_QUERY, true);
+            }
+            if ($capped) {
+                $this->clearLobByteCap($pdo);
+            }
         }
+    }
 
-        $stmt->closeCursor();
+    /**
+     * Cap the bytes the server returns for large LOB/binary columns on a
+     * *preview* read, so one multi-MB cell can't exhaust the worker's memory
+     * at fetch time. No-op by default; SQL Server overrides with SET TEXTSIZE.
+     * Returns whether a cap was applied (so the caller clears it afterwards).
+     */
+    protected function applyLobByteCap(\PDO $pdo, ?int $maxLobBytes): bool
+    {
+        return false;
+    }
+
+    /**
+     * Undo {@see applyLobByteCap()} so exports / full-value fetches on the same
+     * (shared) connection are not truncated.
+     */
+    protected function clearLobByteCap(\PDO $pdo): void
+    {
+        // no-op
     }
 
     public function statement(string $sql, array $bindings = []): int

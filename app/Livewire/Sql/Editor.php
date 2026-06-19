@@ -48,15 +48,6 @@ class Editor extends Component
      */
     public array $databasesList = [];
 
-    /**
-     * The editor's autocomplete schema is only consumed by the (wire:ignore)
-     * CodeMirror config on first paint ; later updates are pushed via the
-     * `sql-editor-set-schema` event from changeDatabase(). This flag lets
-     * render() skip the expensive tablesWithColumns() introspection on every
-     * subsequent round-trip.
-     */
-    public bool $editorBooted = false;
-
     public function mount(CurrentConnection $current): void
     {
         if ($current->driver() === null) {
@@ -75,6 +66,24 @@ class Editor extends Component
         $this->currentDatabase = $current->defaultDatabase();
         $this->lastResult = null;
         $this->pushSchemaToEditor();
+    }
+
+    /**
+     * Build the autocomplete schema and push it to the editor. Called once
+     * after first paint via `wire:init` so the (potentially slow) catalog
+     * introspection happens off the critical path — the page is already
+     * interactive while this runs.
+     */
+    public function loadSchema(CurrentConnection $current, SchemaIntrospectionService $schemaService): void
+    {
+        if ($current->driver() === null || $this->currentDatabase === null) {
+            return;
+        }
+
+        $this->dispatch('sql-editor-set-schema',
+            dialect: $this->dialectName($current),
+            schema: $this->buildSchema($current, $schemaService),
+        );
     }
 
     // ---------------------------------------------------------------------
@@ -293,7 +302,6 @@ class Editor extends Component
         DestructiveSqlDetector $detector,
     ): View {
         $driver = $current->driver();
-        $schema = [];
         $dialect = 'mysql';
 
         if ($driver !== null) {
@@ -306,22 +314,28 @@ class Editor extends Component
                 }
             }
 
-            // Autocomplete schema : only needed for the initial editor config.
-            // Subsequent DB switches push via the sql-editor-set-schema event.
-            if (! $this->editorBooted) {
-                $schema = $this->buildSchema($current, $schemaService);
-                $this->editorBooted = true;
-            }
-
             $dialect = $this->dialectName($current);
         }
 
+        // Result rows live in the cache, not the snapshot — pull them back only
+        // when the last run was a successful read (keeps writes/errors cheap).
+        $resultRows = ($this->lastResult !== null
+            && empty($this->lastResult['isWrite'])
+            && empty($this->lastResult['error']))
+            ? $this->resultRows()
+            : [];
+
+        // The autocomplete schema is NOT built here : on large databases the
+        // introspection alone can exceed the proxy timeout (504). The page
+        // paints with an empty schema and `loadSchema()` (wire:init) fills it
+        // in a follow-up request, pushed straight to CodeMirror via event.
         return view('livewire.sql.editor', [
             'currentLabel' => $current->label(),
             'databases' => $this->databasesList,
-            'schema' => $schema,
+            'schema' => [],
             'dialect' => $dialect,
             'history' => $history->recent($this->historySearch),
+            'resultRows' => $resultRows,
         ]);
     }
 
@@ -348,17 +362,68 @@ class Editor extends Component
     }
 
     /**
+     * Build the small result metadata kept in the public $lastResult property
+     * (serialised in the Livewire snapshot on every request). The actual rows
+     * are cached server-side — keeping them out of the snapshot is what avoids
+     * the 413 (request entity too large) on big result sets.
+     *
      * @return array<string, mixed>
      */
     private function serialiseResult(SqlExecutionResult $result): array
     {
+        if ($result->isWrite || $result->error !== null) {
+            $this->forgetResultRows();
+
+            return [
+                'isWrite' => $result->isWrite,
+                'columns' => [],
+                'rowCount' => 0,
+                'affectedRows' => $result->affectedRows,
+                'durationMs' => $result->durationMs,
+                'error' => $result->error,
+                'truncated' => false,
+            ];
+        }
+
+        $rows = is_array($result->rows) ? $result->rows : iterator_to_array($result->rows);
+        $this->storeResultRows($rows);
+
         return [
-            'isWrite' => $result->isWrite,
-            'rows' => $result->isWrite ? [] : (is_array($result->rows) ? $result->rows : iterator_to_array($result->rows)),
+            'isWrite' => false,
             'columns' => $result->columns,
-            'affectedRows' => $result->affectedRows,
+            'rowCount' => count($rows),
+            'affectedRows' => 0,
             'durationMs' => $result->durationMs,
-            'error' => $result->error,
+            'error' => null,
+            'truncated' => $result->truncated,
         ];
+    }
+
+    private function resultRowsCacheKey(): string
+    {
+        return 'tableflip:sql:rows:'.$this->getId();
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     */
+    private function storeResultRows(array $rows): void
+    {
+        \Illuminate\Support\Facades\Cache::put($this->resultRowsCacheKey(), $rows, now()->addHours(2));
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function resultRows(): array
+    {
+        $cached = \Illuminate\Support\Facades\Cache::get($this->resultRowsCacheKey());
+
+        return is_array($cached) ? $cached : [];
+    }
+
+    private function forgetResultRows(): void
+    {
+        \Illuminate\Support\Facades\Cache::forget($this->resultRowsCacheKey());
     }
 }

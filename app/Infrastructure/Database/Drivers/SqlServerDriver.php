@@ -294,6 +294,31 @@ class SqlServerDriver extends AbstractDatabaseDriver
     }
 
     /**
+     * SET TEXTSIZE bounds, server-side, the bytes returned for varbinary(max),
+     * varchar(max)/nvarchar(max), text/ntext and image columns. A varbinary
+     * column holding a raw PDF is truncated before it crosses the wire, so the
+     * preview never has to materialise the whole blob in PHP. The value is an
+     * int we control (no binding on SET statements), so interpolation is safe.
+     */
+    protected function applyLobByteCap(\PDO $pdo, ?int $maxLobBytes): bool
+    {
+        if ($maxLobBytes === null || $maxLobBytes <= 0) {
+            return false;
+        }
+
+        $pdo->exec('SET TEXTSIZE '.(int) $maxLobBytes);
+
+        return true;
+    }
+
+    protected function clearLobByteCap(\PDO $pdo): void
+    {
+        // Restore the effectively-unlimited ceiling so a later export or
+        // full-value fetch on the same pooled connection isn't truncated.
+        $pdo->exec('SET TEXTSIZE 2147483647');
+    }
+
+    /**
      * One INFORMATION_SCHEMA query covers the whole database — saves N
      * round-trips on big catalogs (Sage SS2I tops 600 tables).
      */

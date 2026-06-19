@@ -24,6 +24,8 @@ class TableDataQueryService
      *
      * @param  list<Filter>  $filters
      * @param  list<Sort>  $sort
+     * @param  ?int  $maxLobBytes  cap on large LOB/binary columns for the page
+     *                             preview (null = no cap)
      * @return array{rows: list<array<string, mixed>>, total: int, columns: list<string>}
      */
     public function query(
@@ -34,6 +36,7 @@ class TableDataQueryService
         int $page = 1,
         int $perPage = 50,
         bool $skipCount = false,
+        ?int $maxLobBytes = null,
     ): array {
         $qualified = $driver->qualify($table);
 
@@ -46,7 +49,10 @@ class TableDataQueryService
 
         $dataSql = $driver->paginate("SELECT * FROM {$qualified}{$whereClause}", $orderClause, $perPage, $offset);
 
-        $dataResult = $driver->select($dataSql, $bindings);
+        // Cap LOB/binary columns server-side for the page preview — a table
+        // with a varbinary(max) PDF column would otherwise pull every blob on
+        // the page into memory. The count query needs no cap (returns an int).
+        $dataResult = $driver->select($dataSql, $bindings, $maxLobBytes);
         $rows = is_array($dataResult->rows) ? $dataResult->rows : iterator_to_array($dataResult->rows);
 
         $total = -1;

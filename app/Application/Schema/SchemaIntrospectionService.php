@@ -80,25 +80,40 @@ class SchemaIntrospectionService
 
     /**
      * Build a `{ tableName: [col1, col2, ...] }` map for the whole database,
-     * intended for feeding CodeMirror's SQL autocompletion. Iterates per-table
-     * which is O(N) introspection queries — fine for typical sizes, can be
-     * swapped for a single INFORMATION_SCHEMA query if it ever becomes the
-     * bottleneck.
+     * intended for feeding CodeMirror's SQL autocompletion.
+     *
+     * Uses the driver's bulk column introspection (one INFORMATION_SCHEMA
+     * query for the whole catalog) instead of one query per table — the old
+     * per-table loop was O(N) round-trips and timed out (504) on large
+     * databases with hundreds of tables.
      *
      * @return array<string, list<string>>
      */
     public function tablesWithColumns(DatabaseDriverInterface $driver, ?string $database = null): array
     {
+        if ($database === null || $database === '') {
+            return [];
+        }
+
         $key = 'tables_with_columns:'.spl_object_id($driver).":{$database}";
 
         return $this->cached($key, function () use ($driver, $database) {
+            // Route through the per-DB pool so PostgreSQL hits the right
+            // connection (one connection = one database there).
+            $effective = $this->driverFor($driver, $database);
+
+            try {
+                $bulk = $effective->bulkColumns($database);
+            } catch (Throwable) {
+                return [];
+            }
+
             $result = [];
             foreach ($this->tables($driver, $database) as $table) {
-                try {
-                    $cols = $this->tableDetail($driver, $table)['columns'];
+                $bulkKey = strtolower(($table->schema ?? '').'.'.$table->name);
+                $cols = $bulk[$bulkKey] ?? null;
+                if ($cols !== null) {
                     $result[$table->name] = array_map(static fn ($c) => $c->name, $cols);
-                } catch (Throwable) {
-                    // Skip tables we can't introspect (perms, broken views…)
                 }
             }
 

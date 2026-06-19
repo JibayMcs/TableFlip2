@@ -17,11 +17,12 @@ final readonly class SqlExecutionResult
         public int $affectedRows,
         public float $durationMs,
         public ?string $error = null,
+        public bool $truncated = false,
     ) {}
 
-    public static function read(iterable $rows, array $columns, float $durationMs): self
+    public static function read(iterable $rows, array $columns, float $durationMs, bool $truncated = false): self
     {
-        return new self(false, $rows, $columns, 0, $durationMs);
+        return new self(false, $rows, $columns, 0, $durationMs, null, $truncated);
     }
 
     public static function write(int $affectedRows, float $durationMs): self

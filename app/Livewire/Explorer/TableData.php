@@ -14,6 +14,7 @@ use App\Domain\Database\Query\SortDirection;
 use App\Domain\Database\ValueObjects\TableIdentifier;
 use App\Livewire\Explorer\Concerns\HasRowEditing;
 use App\Livewire\Explorer\Concerns\HasSqlScratchPad;
+use App\Support\CellPreview;
 use Illuminate\Contracts\View\View;
 use Livewire\Attributes\On;
 use Livewire\Attributes\Url;
@@ -235,6 +236,14 @@ class TableData extends Component
     private const CELL_DISPLAY_CAP = 240;
 
     /**
+     * Bytes requested from the driver per large LOB/binary column on the page
+     * preview. SQL Server truncates server-side (SET TEXTSIZE) so a varbinary
+     * column storing a PDF never drags the whole blob into PHP. Comfortably
+     * above {@see CELL_DISPLAY_CAP} so text we'd actually show isn't clipped.
+     */
+    private const LOB_FETCH_BYTES = 8192;
+
+    /**
      * Resolve the driver to use for data operations on the current table.
      * On PostgreSQL this swaps to a connection scoped to the table's DB
      * (see {@see SchemaIntrospectionService::driverFor}); on other engines
@@ -290,10 +299,12 @@ class TableData extends Component
     }
 
     /**
-     * Strip wide string values down to {@see CELL_DISPLAY_CAP} chars. Skips
-     * PK columns (used to build rowKey) and non-string values. Returns the
-     * trimmed rows plus a parallel map [rowIndex => [col => true]] flagging
-     * the cells that were truncated.
+     * Trim wide cells for display. Binary values (varbinary/BLOB/image storing
+     * a PDF, a photo, …) collapse to a marker; long text is cut to
+     * {@see CELL_DISPLAY_CAP} bytes. Skips PK columns (used to build rowKey)
+     * and non-strings. Returns the trimmed rows plus a parallel map
+     * [rowIndex => [col => true]] flagging the cells offered for expand — only
+     * clipped text, never the binary marker (no point fetching a raw blob).
      *
      * @param  list<array<string, mixed>>  $rows
      * @param  list<string>  $pkColumns
@@ -308,8 +319,11 @@ class TableData extends Component
                 if (in_array($col, $pkColumns, true) || ! is_string($value)) {
                     continue;
                 }
-                if (mb_strlen($value) > self::CELL_DISPLAY_CAP) {
-                    $rows[$i][$col] = mb_substr($value, 0, self::CELL_DISPLAY_CAP).'…';
+                [$capped, $wasTruncatedText] = CellPreview::cap($value, self::CELL_DISPLAY_CAP);
+                if ($capped !== $value) {
+                    $rows[$i][$col] = $capped;
+                }
+                if ($wasTruncatedText) {
                     $truncated[$i][$col] = true;
                 }
             }
@@ -472,7 +486,11 @@ class TableData extends Component
         $skipCount = $this->cachedTotal !== null && $this->cachedTotalSignature === $signature;
 
         try {
-            $result = $service->query($driver, $tableId, $filters, $sortRules, $this->page, $this->perPage, skipCount: $skipCount);
+            $result = $service->query(
+                $driver, $tableId, $filters, $sortRules, $this->page, $this->perPage,
+                skipCount: $skipCount,
+                maxLobBytes: self::LOB_FETCH_BYTES,
+            );
         } catch (Throwable $e) {
             return view('livewire.explorer.table-data', $this->emptyView($e->getMessage()));
         }
